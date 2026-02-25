@@ -4,6 +4,9 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const yauzl = require('yauzl');
+const StreamZip = require('node-stream-zip');
+const Node7z = require('node-7z');
+const tar = require('tar');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,6 +43,12 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     if (originalName.endsWith('.zip')) {
       analysisResult = await analyzeZipFile(filePath);
+    } else if (originalName.endsWith('.rar')) {
+      analysisResult = await analyzeRarFile(filePath);
+    } else if (originalName.endsWith('.7z')) {
+      analysisResult = await analyze7zFile(filePath);
+    } else if (originalName.endsWith('.tar') || originalName.endsWith('.tar.gz') || originalName.endsWith('.tgz') || originalName.endsWith('.tar.bz2')) {
+      analysisResult = await analyzeTarFile(filePath);
     } else {
       analysisResult = await analyzeSingleFile(filePath, originalName);
     }
@@ -241,6 +250,180 @@ function analyzeCodeStructure(content, extension) {
   }
   
   return structure;
+}
+
+async function analyzeRarFile(rarPath) {
+  try {
+    const zip = new StreamZip.async({ file: rarPath });
+    const entries = await zip.entries();
+    const results = [];
+    
+    for (const [fileName, entry] of Object.entries(entries)) {
+      if (!entry.isDirectory) {
+        try {
+          const content = await zip.entryData(fileName);
+          const contentStr = content.toString('utf8');
+          const fileExtension = path.extname(fileName).toLowerCase();
+          
+          const analysis = {
+            fileName: fileName,
+            language: detectLanguage(fileExtension, contentStr),
+            technologies: detectTechnologies(contentStr, fileExtension),
+            size: entry.size,
+            lines: contentStr.split('\n').length,
+            structure: analyzeCodeStructure(contentStr, fileExtension)
+          };
+          results.push(analysis);
+        } catch (error) {
+          console.error(`RARファイル解析エラー: ${fileName}`, error);
+        }
+      }
+    }
+    
+    await zip.close();
+    
+    return {
+      type: 'rar',
+      totalFiles: results.length,
+      files: results,
+      summary: generateSummary(results)
+    };
+  } catch (error) {
+    console.error('RAR解析エラー:', error);
+    throw new Error('RARファイルの解析に失敗しました');
+  }
+}
+
+async function analyze7zFile(archivePath) {
+  try {
+    const tempDir = fs.mkdtempSync(path.join(__dirname, 'temp-'));
+    const zipStream = Node7z.extractFull(archivePath, tempDir);
+    
+    return new Promise((resolve, reject) => {
+      const results = [];
+      
+      zipStream.on('data', (data) => {
+        // 処理中のデータ
+      });
+      
+      zipStream.on('end', () => {
+        try {
+          const files = getAllFiles(tempDir);
+          
+          files.forEach(filePath => {
+            try {
+              const content = fs.readFileSync(filePath, 'utf8');
+              const fileName = path.relative(tempDir, filePath);
+              const fileExtension = path.extname(fileName).toLowerCase();
+              
+              const analysis = {
+                fileName: fileName,
+                language: detectLanguage(fileExtension, content),
+                technologies: detectTechnologies(content, fileExtension),
+                size: fs.statSync(filePath).size,
+                lines: content.split('\n').length,
+                structure: analyzeCodeStructure(content, fileExtension)
+              };
+              results.push(analysis);
+            } catch (error) {
+              console.error(`7Zファイル解析エラー: ${filePath}`, error);
+            }
+          });
+          
+          // 一時ディレクトリを削除
+          fs.rmSync(tempDir, { recursive: true, force: true });
+          
+          resolve({
+            type: '7z',
+            totalFiles: results.length,
+            files: results,
+            summary: generateSummary(results)
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+      
+      zipStream.on('error', (error) => {
+        // 一時ディレクトリを削除
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        reject(error);
+      });
+    });
+  } catch (error) {
+    console.error('7Z解析エラー:', error);
+    throw new Error('7Zファイルの解析に失敗しました');
+  }
+}
+
+async function analyzeTarFile(tarPath) {
+  try {
+    const tempDir = fs.mkdtempSync(path.join(__dirname, 'temp-'));
+    
+    await tar.extract({
+      file: tarPath,
+      cwd: tempDir,
+      strip: 0
+    });
+    
+    const results = [];
+    const files = getAllFiles(tempDir);
+    
+    files.forEach(filePath => {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const fileName = path.relative(tempDir, filePath);
+        const fileExtension = path.extname(fileName).toLowerCase();
+        
+        const analysis = {
+          fileName: fileName,
+          language: detectLanguage(fileExtension, content),
+          technologies: detectTechnologies(content, fileExtension),
+          size: fs.statSync(filePath).size,
+          lines: content.split('\n').length,
+          structure: analyzeCodeStructure(content, fileExtension)
+        };
+        results.push(analysis);
+      } catch (error) {
+        console.error(`TARファイル解析エラー: ${filePath}`, error);
+      }
+    });
+    
+    // 一時ディレクトリを削除
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    
+    return {
+      type: 'tar',
+      totalFiles: results.length,
+      files: results,
+      summary: generateSummary(results)
+    };
+  } catch (error) {
+    console.error('TAR解析エラー:', error);
+    throw new Error('TARファイルの解析に失敗しました');
+  }
+}
+
+function getAllFiles(dirPath) {
+  const files = [];
+  
+  function traverse(currentPath) {
+    const items = fs.readdirSync(currentPath);
+    
+    for (const item of items) {
+      const fullPath = path.join(currentPath, item);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        traverse(fullPath);
+      } else {
+        files.push(fullPath);
+      }
+    }
+  }
+  
+  traverse(dirPath);
+  return files;
 }
 
 function generateSummary(results) {
