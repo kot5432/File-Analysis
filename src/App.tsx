@@ -44,9 +44,30 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // サポートするファイル拡張子
+  const SUPPORTED_EXTENSIONS = [
+    // コードファイル
+    '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.xml', '.php', '.py', '.java',
+    '.cpp', '.c', '.h', '.cs', '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.r', '.m',
+    '.sh', '.sql', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.md', '.txt',
+    // アーカイブ
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.tgz'
+  ];
+
+  // ファイルタイプをチェックする関数
+  const isSupportedFile = (filename: string): boolean => {
+    const ext = '.' + filename.split('.').pop()?.toLowerCase();
+    return SUPPORTED_EXTENSIONS.includes(ext);
+  };
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if (!isSupportedFile(file.name)) {
+        setError('サポートされていないファイル形式です。コードファイルまたはアーカイブファイルのみアップロードできます。');
+        setSelectedFile(null);
+        return;
+      }
       setSelectedFile(file);
       setError(null);
       setAnalysisResult(null);
@@ -57,6 +78,11 @@ function App() {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
     if (file) {
+      if (!isSupportedFile(file.name)) {
+        setError('サポートされていないファイル形式です。コードファイルまたはアーカイブファイルのみアップロードできます。');
+        setSelectedFile(null);
+        return;
+      }
       setSelectedFile(file);
       setError(null);
       setAnalysisResult(null);
@@ -122,7 +148,7 @@ function App() {
               <input
                 type="file"
                 onChange={handleFileSelect}
-                accept=".js,.jsx,.ts,.tsx,.py,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.html,.css,.scss,.sass,.less,.json,.xml,.yaml,.yml,.md,.sql,.sh,.vue,.svelte,.zip,.rar,.7z,.tar,.tar.gz,.tgz,.tar.bz2"
+                accept=".js,.jsx,.ts,.tsx,.py,.java,.cpp,.c,.h,.cs,.php,.rb,.go,.rs,.swift,.kt,.scala,.r,.m,.sh,.sql,.html,.css,.scss,.sass,.less,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.md,.txt,.zip,.rar,.7z,.tar,.tar.gz,.tgz,.tar.bz2"
                 style={{ display: 'none' }}
                 id="file-input"
               />

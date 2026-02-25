@@ -15,6 +15,22 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// サポートするファイル拡張子
+const SUPPORTED_EXTENSIONS = [
+  // コードファイル
+  '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.xml', '.php', '.py', '.java',
+  '.cpp', '.c', '.h', '.cs', '.rb', '.go', '.rs', '.swift', '.kt', '.scala', '.r', '.m',
+  '.sh', '.sql', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.md', '.txt',
+  // アーカイブ
+  '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.tgz'
+];
+
+// ファイルタイプをチェックする関数
+function isSupportedFile(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  return SUPPORTED_EXTENSIONS.includes(ext);
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = 'uploads/';
@@ -28,12 +44,28 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (isSupportedFile(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('サポートされていないファイル形式です。コードファイルまたはアーカイブファイルのみアップロードできます。'), false);
+    }
+  }
+});
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'ファイルがアップロードされていません' });
+    }
+
+    // 追加のファイルタイプチェック
+    if (!isSupportedFile(req.file.originalname)) {
+      return res.status(400).json({ 
+        error: 'サポートされていないファイル形式です。コードファイル（.js, .ts, .py, .javaなど）またはアーカイブファイル（.zip, .rar, .7zなど）のみアップロードできます。' 
+      });
     }
 
     const filePath = req.file.path;
