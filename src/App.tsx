@@ -4,6 +4,7 @@ import { analyzeNestingDepth } from './lib/analysis/nesting';
 import { analyzeCommentRatio } from './lib/analysis/commentRatio';
 import { analyzeFileSize } from './lib/analysis/fileSize';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
+import { RiskGauge } from './components/RiskGauge';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -347,17 +348,10 @@ function App() {
               <div className="blackbox-risk-section">
                 <h3>⚠️ ブラックボックスリスク分析</h3>
                 <div className="risk-gauge-container">
-                  <div className="risk-gauge">
-                    <div className={`risk-score ${analysisResult.blackboxRisk.level.toLowerCase()}`}>
-                      <div className="risk-number">{analysisResult.blackboxRisk.score}</div>
-                      <div className="risk-label">Blackbox Risk</div>
-                    </div>
-                    <div className="risk-level">
-                      <span className={`level-badge ${analysisResult.blackboxRisk.level.toLowerCase()}`}>
-                        {analysisResult.blackboxRisk.level}
-                      </span>
-                    </div>
-                  </div>
+                  <RiskGauge 
+                    score={analysisResult.blackboxRisk.score}
+                    level={analysisResult.blackboxRisk.level}
+                  />
                 </div>
                 
                 <div className="risk-breakdown">
