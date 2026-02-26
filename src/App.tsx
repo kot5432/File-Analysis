@@ -596,7 +596,7 @@ function App() {
                     </div>
                   </div>
                 </div>
-
+                
                 {analysisResult.technologies && analysisResult.technologies.length > 0 && (
                   <div className="technologies-summary">
                     <h3>検出された技術</h3>
