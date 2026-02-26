@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import './App.css';
 import { analyzeNestingDepth } from './lib/analysis/nesting';
 import { analyzeCommentRatio } from './lib/analysis/commentRatio';
+import { analyzeFileSize } from './lib/analysis/fileSize';
+import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -30,6 +32,10 @@ interface BlackboxRisk {
     riskScore: number;
     commentLines: number;
     totalLines: number;
+  };
+  fileSize?: {
+    lineCount: number;
+    riskScore: number;
   };
 }
 
@@ -88,69 +94,38 @@ function App() {
     return SUPPORTED_EXTENSIONS.includes(ext);
   };
 
-  // ブラックボックスリスク分析関数
-  const analyzeBlackboxRisk = (content: string, lines: number): BlackboxRisk => {
-    // ネスト深度分析
+  // ブラックボックスリスク分析関数（新バージョン）
+  const analyzeBlackboxRisk = (content: string): BlackboxRisk => {
+    // 各専門関数で分析
     const nestingResult = analyzeNestingDepth(content);
-    
-    // コメント率分析
     const commentResult = analyzeCommentRatio(content);
+    const fileSizeResult = analyzeFileSize(content);
     
-    const breakdown: RiskBreakdown = {
-      fileSize: calculateFileSizeRisk(lines),
-      functionLength: calculateFunctionLengthRisk(content),
-      nestingDepth: nestingResult.riskScore, // 新しい関数を使用
-      commentRate: commentResult.riskScore, // 新しい関数を使用
-      unusedCode: calculateUnusedCodeRisk(content),
-      typeSafety: calculateTypeSafetyRisk(content)
-    };
-
-    const totalScore = Object.values(breakdown).reduce((sum, score) => sum + score, 0);
-    const level = totalScore >= 70 ? 'HIGH' : totalScore >= 40 ? 'MEDIUM' : 'LOW';
+    // 総合スコアを計算
+    const riskResult = calculateBlackboxRisk({
+      nestingScore: nestingResult.riskScore,
+      commentScore: commentResult.riskScore,
+      fileSizeScore: fileSizeResult.riskScore
+    });
 
     return { 
-      score: totalScore, 
-      level, 
-      breakdown,
-      nestingDepth: nestingResult, // 詳細情報も保持
-      commentRatio: commentResult // 詳細情報も保持
+      score: riskResult.blackboxScore, 
+      level: riskResult.riskLevel, 
+      breakdown: {
+        fileSize: riskResult.breakdown.fileSize,
+        functionLength: 0, // 今後実装
+        nestingDepth: riskResult.breakdown.nesting,
+        commentRate: riskResult.breakdown.comments,
+        unusedCode: 0, // 今後実装
+        typeSafety: 0 // 今後実装
+      },
+      nestingDepth: nestingResult,
+      commentRatio: commentResult,
+      fileSize: fileSizeResult
     };
   };
 
-  // 各リスク要因の計算関数
-  const calculateFileSizeRisk = (lines: number): number => {
-    if (lines > 1000) return 20;
-    if (lines > 500) return 10;
-    return 0;
-  };
-
-  const calculateFunctionLengthRisk = (content: string): number => {
-    const functions = content.match(/function\s+\w+|=>\s*{|\w+\s*:\s*function/g) || [];
-    
-    // 簡易的な関数長計算（MVP）
-    const avgLength = functions.length > 0 ? Math.floor(content.split('\n').length / functions.length) : 0;
-    
-    if (avgLength > 50) return 20;
-    if (avgLength > 30) return 10;
-    return 0;
-  };
-
-  const calculateUnusedCodeRisk = (content: string): number => {
-    // 簡易的な未使用関数検出（MVP）
-    const functionNames = content.match(/function\s+(\w+)|const\s+(\w+)\s*=/g) || [];
-    return functionNames.length > 10 ? 10 : 5;
-  };
-
-  const calculateTypeSafetyRisk = (content: string): number => {
-    const anyCount = (content.match(/: any/g) || []).length;
-    const totalTypes = (content.match(/: \w+/g) || []).length;
-    
-    if (totalTypes === 0) return 0;
-    const anyRate = anyCount / totalTypes;
-    
-    return anyRate > 0.3 ? 10 : anyRate > 0.1 ? 5 : 0;
-  };
-
+  // 補助関数
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -202,8 +177,8 @@ function App() {
       // 技術スタック検出
       const technologies = detectTechnologies(content, language);
       
-      // ブラックボックスリスク分析
-      const blackboxRisk = analyzeBlackboxRisk(content, lines);
+      // ブラックボックスリスク分析（新バージョン）
+      const blackboxRisk = analyzeBlackboxRisk(content);
       
       // 結果を設定
       const result: AnalysisResult = {
@@ -230,7 +205,6 @@ function App() {
     }
   };
 
-  // 補助関数
   const detectLanguage = (ext: string): string => {
     const languageMap: { [key: string]: string } = {
       '.js': 'JavaScript',
@@ -393,6 +367,13 @@ function App() {
                       <span className="item-label">ファイル肥大</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.fileSize}</span>
                     </div>
+                    {analysisResult.blackboxRisk.fileSize && (
+                      <div className="file-size-detail">
+                        <span className="detail-label">
+                          行数: {analysisResult.blackboxRisk.fileSize.lineCount}行
+                        </span>
+                      </div>
+                    )}
                     <div className="breakdown-item">
                       <span className="item-label">関数の長さ</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.functionLength}</span>
