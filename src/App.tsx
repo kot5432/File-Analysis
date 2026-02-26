@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
 import { analyzeNestingDepth } from './lib/analysis/nesting';
+import { analyzeCommentRatio } from './lib/analysis/commentRatio';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -23,6 +24,12 @@ interface BlackboxRisk {
   nestingDepth?: {
     maxDepth: number;
     riskScore: number;
+  };
+  commentRatio?: {
+    commentRatio: number;
+    riskScore: number;
+    commentLines: number;
+    totalLines: number;
   };
 }
 
@@ -86,11 +93,14 @@ function App() {
     // ネスト深度分析
     const nestingResult = analyzeNestingDepth(content);
     
+    // コメント率分析
+    const commentResult = analyzeCommentRatio(content);
+    
     const breakdown: RiskBreakdown = {
       fileSize: calculateFileSizeRisk(lines),
       functionLength: calculateFunctionLengthRisk(content),
       nestingDepth: nestingResult.riskScore, // 新しい関数を使用
-      commentRate: calculateCommentRateRisk(content, lines),
+      commentRate: commentResult.riskScore, // 新しい関数を使用
       unusedCode: calculateUnusedCodeRisk(content),
       typeSafety: calculateTypeSafetyRisk(content)
     };
@@ -102,7 +112,8 @@ function App() {
       score: totalScore, 
       level, 
       breakdown,
-      nestingDepth: nestingResult // 詳細情報も保持
+      nestingDepth: nestingResult, // 詳細情報も保持
+      commentRatio: commentResult // 詳細情報も保持
     };
   };
 
@@ -110,22 +121,6 @@ function App() {
   const calculateFileSizeRisk = (lines: number): number => {
     if (lines > 1000) return 20;
     if (lines > 500) return 10;
-    return 0;
-  };
-
-  const calculateCommentRateRisk = (content: string, totalLines: number): number => {
-    const commentLines = content.split('\n').filter(line => 
-      line.trim().startsWith('//') || 
-      line.trim().startsWith('/*') || 
-      line.trim().startsWith('*') ||
-      line.trim().startsWith('#') ||
-      line.trim().match(/\/\*.*\*\//)
-    ).length;
-    
-    const commentRate = commentLines / totalLines;
-    
-    if (commentRate < 0.05) return 15;
-    if (commentRate < 0.10) return 8;
     return 0;
   };
 
@@ -415,6 +410,14 @@ function App() {
                       <span className="item-label">コメント率</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.commentRate}</span>
                     </div>
+                    {analysisResult.blackboxRisk.commentRatio && (
+                      <div className="comment-detail">
+                        <span className="detail-label">
+                          コメント率: {(analysisResult.blackboxRisk.commentRatio.commentRatio * 100).toFixed(1)}%
+                          ({analysisResult.blackboxRisk.commentRatio.commentLines}/{analysisResult.blackboxRisk.commentRatio.totalLines}行)
+                        </span>
+                      </div>
+                    )}
                     <div className="breakdown-item">
                       <span className="item-label">未使用コード</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.unusedCode}</span>

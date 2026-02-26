@@ -555,6 +555,15 @@
   font-weight: 500;
 }
 
+.comment-detail {
+  grid-column: 1 / -1;
+  background: #fff3e0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 4px solid #ff9800;
+  margin-top: 4px;
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
   .risk-gauge {
