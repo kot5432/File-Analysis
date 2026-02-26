@@ -525,6 +525,49 @@
   font-weight: 500;
 }
 
+.ai-estimation-section {
+  background: #e8f5e8;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+  border: 1px solid #4caf50;
+}
+
+.ai-estimation-section h4 {
+  color: #2e7d32;
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+}
+
+.ai-signals {
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid #c8e6c9;
+}
+
+.ai-disclaimer {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.signals-list {
+  margin-top: 8px;
+}
+
+.signals-list ul {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+}
+
+.signals-list li {
+  margin: 4px 0;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
   .breakdown-items {

@@ -4,6 +4,7 @@ import { analyzeNestingDepth } from './lib/analysis/nesting';
 import { analyzeCommentRatio } from './lib/analysis/commentRatio';
 import { analyzeFileSize } from './lib/analysis/fileSize';
 import { detectUnusedFunctions } from './lib/analysis/unusedFunctions';
+import { estimateAIGenerated } from './lib/analysis/aiEstimation';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
 
@@ -43,6 +44,11 @@ interface BlackboxRisk {
     unusedFunctions: string[];
     count: number;
     riskScore: number;
+  };
+  aiEstimation?: {
+    aiLikelihood: number;
+    level: 'LOW' | 'MEDIUM' | 'HIGH';
+    reasons: string[];
   };
 }
 
@@ -109,6 +115,14 @@ function App() {
     const fileSizeResult = analyzeFileSize(content);
     const unusedFunctionsResult = detectUnusedFunctions(content);
     
+    // AI生成確率推定
+    const aiResult = estimateAIGenerated({
+      commentRatio: commentResult.commentRatio,
+      unusedFunctionCount: unusedFunctionsResult.count,
+      maxDepth: nestingResult.maxDepth,
+      lineCount: fileSizeResult.lineCount
+    });
+    
     // 総合スコアを計算
     const riskResult = calculateBlackboxRisk({
       nestingScore: nestingResult.riskScore,
@@ -131,7 +145,8 @@ function App() {
       nestingDepth: nestingResult,
       commentRatio: commentResult,
       fileSize: fileSizeResult,
-      unusedFunctions: unusedFunctionsResult // 詳細情報も保持
+      unusedFunctions: unusedFunctionsResult, // 詳細情報も保持
+      aiEstimation: aiResult // AI推定結果も保持
     };
   };
 
@@ -362,6 +377,24 @@ function App() {
                     level={analysisResult.blackboxRisk.level}
                   />
                 </div>
+                
+                {/* AI生成確率推定 */}
+                {analysisResult.blackboxRisk.aiEstimation && (
+                  <div className="ai-estimation-section">
+                    <h4>🤖 AI Generated Likelihood: {analysisResult.blackboxRisk.aiEstimation.level} ({analysisResult.blackboxRisk.aiEstimation.aiLikelihood}%)</h4>
+                    <div className="ai-signals">
+                      <p className="ai-disclaimer">※ This is heuristic estimation, not definitive AI detection.</p>
+                      <div className="signals-list">
+                        <strong>Signals:</strong>
+                        <ul>
+                          {analysisResult.blackboxRisk.aiEstimation.reasons.map((reason, index) => (
+                            <li key={index}>{reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="risk-breakdown">
                   <h4>リスク内訳</h4>
