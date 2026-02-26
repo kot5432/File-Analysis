@@ -7,7 +7,7 @@ import { detectUnusedFunctions } from './lib/analysis/unusedFunctions';
 import { estimateAIGenerated } from './lib/analysis/aiEstimation';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
-import { resolveImport, extractDependencies } from './lib/analysis/importResolver';
+import { analyzeTechStack } from './lib/analysis/techStack';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -86,6 +86,20 @@ interface Summary {
   totalSize: number;
   totalLines: number;
   averageFileSize: number;
+  techStack?: {
+    languages: string[];
+    frameworks: string[];
+    runtime: string[];
+    packageManagers: string[];
+    buildTools: string[];
+  };
+  structure?: {
+    type: string;
+    hasTests: boolean;
+    hasCI: boolean;
+    componentCount: number;
+    apiRoutes: number;
+  };
 }
 
 function App() {
