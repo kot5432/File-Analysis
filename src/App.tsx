@@ -47,6 +47,7 @@ interface FileAnalysis {
   structure: CodeStructure;
   dependencies?: string[];
   resolvedDependencies?: string[];
+  blackboxRisk?: BlackboxRisk;
 }
 
 interface Summary {
@@ -112,6 +113,17 @@ const extractImports = (content: string): string[] => (content.match(/import\s+.
 const extractExports = (content: string): string[] => (content.match(/export\s+(default\s+)?(\w+)/g) || []).map(m => m.replace(/export\s+(default\s+)?/, ''));
 
 // --- Sub-components ---
+
+const RiskBadge: React.FC<{ risk?: BlackboxRisk }> = ({ risk }) => {
+  if (!risk) return null;
+  const color = risk.level === 'HIGH' ? '#ff4d4f' : risk.level === 'MEDIUM' ? '#faad14' : '#52c41a';
+  const label = risk.level === 'HIGH' ? '🔴 HIGH Risk' : risk.level === 'MEDIUM' ? '🟡 MEDIUM Risk' : '🟢 LOW Risk';
+  return (
+    <span className="risk-mini-badge" style={{ backgroundColor: color, color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px', fontWeight: 'bold' }}>
+      {label}
+    </span>
+  );
+};
 
 const RiskAnalysisView: React.FC<{ risk: BlackboxRisk }> = ({ risk }) => (
   <div className="blackbox-risk-section">
@@ -185,13 +197,42 @@ const StructureStats: React.FC<{ structure: CodeStructure }> = ({ structure }) =
   </div>
 );
 
+const HighRiskSummary: React.FC<{ files: FileAnalysis[] }> = ({ files }) => {
+  const highRiskFiles = files
+    .filter(f => f.blackboxRisk?.level === 'HIGH')
+    .sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
+
+  if (highRiskFiles.length === 0) return null;
+
+  return (
+    <div className="high-risk-summary" style={{ backgroundColor: '#fff1f0', border: '1px solid #ffa39e', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+      <h3 style={{ color: '#cf1322', marginTop: 0 }}>🚨 ハイリスク・ファイル検知 ({highRiskFiles.length}件)</h3>
+      <p style={{ fontSize: '0.9rem', marginBottom: '12px' }}>複雑性が高く、AI生成の可能性が高い、または修正が困難な可能性のあるファイルです：</p>
+      <div className="high-risk-list">
+        {highRiskFiles.slice(0, 3).map((file, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < 2 && i < highRiskFiles.length - 1 ? '1px solid #ffccc7' : 'none' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{file.fileName}</span>
+            <span style={{ color: '#cf1322', fontWeight: 'bold' }}>Score: {file.blackboxRisk?.score}</span>
+          </div>
+        ))}
+      </div>
+      {highRiskFiles.length > 3 && (
+        <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '8px', textAlign: 'right' }}>他 {highRiskFiles.length - 3} 件のハイリスクファイル...</p>
+      )}
+    </div>
+  );
+};
+
 const FileGrid: React.FC<{ files: FileAnalysis[] }> = ({ files }) => (
   <div className="important-files">
     <h3>主要ファイル</h3>
     <div className="files-grid">
       {files.sort((a, b) => b.size - a.size).slice(0, 10).map((file, i) => (
         <div key={i} className="file-card">
-          <h4>{file.fileName}</h4>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.fileName}</h4>
+            <RiskBadge risk={file.blackboxRisk} />
+          </div>
           <div className="file-meta">
             <span className="file-language">{file.language}</span>
             <span className="file-size">{formatFileSize(file.size)}</span>
@@ -276,12 +317,14 @@ function App() {
 
         const analyzed = extracted.map(f => {
           const lang = detectLanguage(f.path);
+          const content = f.content;
           return {
-            fileName: f.path, language: lang, technologies: detectTechnologies(f.content, lang),
-            size: f.content.length, lines: f.content.split('\n').length,
-            structure: { functions: extractFunctions(f.content), classes: extractClasses(f.content), imports: extractImports(f.content), exports: extractExports(f.content) },
-            dependencies: extractDependencies(f.content),
-            resolvedDependencies: extractDependencies(f.content).map(d => resolveImport(f.path, d, fileMap)).filter((d): d is string => d !== null)
+            fileName: f.path, language: lang, technologies: detectTechnologies(content, lang),
+            size: content.length, lines: content.split('\n').length,
+            structure: { functions: extractFunctions(content), classes: extractClasses(content), imports: extractImports(content), exports: extractExports(content) },
+            dependencies: extractDependencies(content),
+            resolvedDependencies: extractDependencies(content).map(d => resolveImport(f.path, d, fileMap)).filter((d): d is string => d !== null),
+            blackboxRisk: analyzeBlackboxRisk(content)
           };
         });
 
@@ -398,7 +441,12 @@ function App() {
               )}
 
               {analysisResult.structure && <StructureStats structure={analysisResult.structure} />}
-              {analysisResult.files && <FileGrid files={analysisResult.files} />}
+              {analysisResult.files && (
+                <>
+                  <HighRiskSummary files={analysisResult.files} />
+                  <FileGrid files={analysisResult.files} />
+                </>
+              )}
             </div>
           </div>
         )}
