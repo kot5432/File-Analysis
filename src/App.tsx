@@ -132,7 +132,7 @@ function App() {
     const commentResult = analyzeCommentRatio(content);
     const fileSizeResult = analyzeFileSize(content);
     const unusedFunctionsResult = detectUnusedFunctions(content);
-    
+
     // AI生成確率推定
     const aiResult = estimateAIGenerated({
       commentRatio: commentResult.commentRatio,
@@ -140,7 +140,7 @@ function App() {
       maxDepth: nestingResult.maxDepth,
       lineCount: fileSizeResult.lineCount
     });
-    
+
     // 総合スコアを計算
     const riskResult = calculateBlackboxRisk({
       nestingScore: nestingResult.riskScore,
@@ -149,9 +149,9 @@ function App() {
       unusedFunctionsScore: unusedFunctionsResult.riskScore
     });
 
-    return { 
-      score: riskResult.blackboxScore, 
-      level: riskResult.riskLevel, 
+    return {
+      score: riskResult.blackboxScore,
+      level: riskResult.riskLevel,
       breakdown: {
         fileSize: riskResult.breakdown.fileSize,
         functionLength: 0, // 今後実装
@@ -207,23 +207,23 @@ function App() {
     return new Promise((resolve, reject) => {
       const JSZip = require('jszip');
       const reader = new FileReader();
-      
+
       reader.onload = async (e) => {
         try {
           const zip = new JSZip();
           const contents = await zip.loadAsync(e.target?.result as ArrayBuffer);
           const files: { path: string; content: string }[] = [];
-          
+
           for (const [relativePath, fileData] of Object.entries(contents.files)) {
             // ディレクトリは除外
             if ((fileData as any).dir) continue;
-            
+
             // node_modules と不要なファイルを除外
-            if (relativePath.includes('node_modules/') || 
-                relativePath.includes('.git/') ||
-                relativePath.includes('dist/') ||
-                relativePath.includes('build/')) continue;
-            
+            if (relativePath.includes('node_modules/') ||
+              relativePath.includes('.git/') ||
+              relativePath.includes('dist/') ||
+              relativePath.includes('build/')) continue;
+
             // サポートされているファイルのみ処理
             const ext = '.' + relativePath.split('.').pop()?.toLowerCase();
             if (isSupportedFile(relativePath)) {
@@ -234,13 +234,13 @@ function App() {
               });
             }
           }
-          
+
           resolve(files);
         } catch (error) {
           reject(error);
         }
       };
-      
+
       reader.onerror = () => reject(new Error('ファイル読み込みに失敗しました'));
       reader.readAsArrayBuffer(file);
     });
@@ -255,7 +255,7 @@ function App() {
     try {
       // ZIPファイルかチェック
       const isZip = selectedFile.name.toLowerCase().endsWith('.zip');
-      
+
       if (isZip) {
         // ZIP展開して分析
         const extractedFiles = await extractZipFile(selectedFile);
@@ -264,18 +264,18 @@ function App() {
           map[normalized] = file.content;
           return map;
         }, {} as Record<string, string>);
-        
+
         // 各ファイルを分析
         const analyzedFiles = extractedFiles.map(file => {
           const language = detectLanguage(file.path);
           const technologies = detectTechnologies(file.content, language);
-          
+
           // 依存関係を抽出・解決
           const dependencies = extractDependencies(file.content);
           const resolvedDependencies = dependencies
             .map((dep: string) => resolveImport(file.path, dep, fileMap))
             .filter((dep): dep is string => dep !== null);
-          
+
           return {
             fileName: file.path,
             language,
@@ -292,18 +292,18 @@ function App() {
             resolvedDependencies
           };
         });
-        
+
         // 集計結果
         const languageCounts: { [key: string]: number } = {};
         const technologyCounts: { [key: string]: number } = {};
-        
+
         analyzedFiles.forEach(file => {
           languageCounts[file.language] = (languageCounts[file.language] || 0) + 1;
           file.technologies.forEach(tech => {
             technologyCounts[tech] = (technologyCounts[tech] || 0) + 1;
           });
         });
-        
+
         const summary = {
           totalFiles: extractedFiles.length,
           totalLines: analyzedFiles.reduce((sum, f) => sum + f.lines, 0),
@@ -312,7 +312,7 @@ function App() {
           languages: languageCounts,
           technologies: technologyCounts
         };
-        
+
         const result: AnalysisResult = {
           type: 'zip',
           fileName: selectedFile.name,
@@ -320,18 +320,18 @@ function App() {
           files: analyzedFiles,
           summary
         };
-        
+
         setAnalysisResult(result);
       } else {
         // 単一ファイル分析（既存処理）
         const content = await selectedFile.text();
         const lines = content.split('\n').length;
-        
+
         const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
         const language = detectLanguage(ext);
         const technologies = detectTechnologies(content, language);
         const blackboxRisk = analyzeBlackboxRisk(content);
-        
+
         const result: AnalysisResult = {
           type: 'single',
           fileName: selectedFile.name,
@@ -347,7 +347,7 @@ function App() {
             exports: extractExports(content)
           }
         };
-        
+
         setAnalysisResult(result);
       }
     } catch (err) {
@@ -388,27 +388,27 @@ function App() {
 
   const detectTechnologies = (content: string, language: string): string[] => {
     const technologies: string[] = [];
-    
+
     // React
     if (content.includes('import React') || content.includes('from "react"')) {
       technologies.push('React');
     }
-    
+
     // Node.js
     if (content.includes('require(') || content.includes('import ')) {
       technologies.push('Node.js');
     }
-    
+
     // TypeScript
     if (language === 'TypeScript' || language === 'TypeScript React') {
       technologies.push('TypeScript');
     }
-    
+
     // Express
     if (content.includes('express') || content.includes('app.get') || content.includes('app.post')) {
       technologies.push('Express.js');
     }
-    
+
     return technologies;
   };
 
@@ -493,18 +493,18 @@ function App() {
         {analysisResult && (
           <div className="results-section">
             <h2>分析結果</h2>
-            
+
             {/* ブラックボックスリスク表示 */}
             {analysisResult.blackboxRisk && (
               <div className="blackbox-risk-section">
                 <h3>⚠️ ブラックボックスリスク分析</h3>
                 <div className="risk-gauge-container">
-                  <RiskGauge 
+                  <RiskGauge
                     score={analysisResult.blackboxRisk.score}
                     level={analysisResult.blackboxRisk.level}
                   />
                 </div>
-                
+
                 {/* AI生成確率推定 */}
                 {analysisResult.blackboxRisk.aiEstimation && (
                   <div className="ai-estimation-section">
@@ -522,7 +522,7 @@ function App() {
                     </div>
                   </div>
                 )}
-                
+
                 <div className="risk-breakdown">
                   <h4>リスク内訳</h4>
                   <div className="breakdown-items">
@@ -584,20 +584,28 @@ function App() {
                       <span className="item-label">型安全性</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.typeSafety}</span>
                     </div>
-                      <span className="stat-value">{analysisResult.language}</span>
+                  </div>
+                </div>
+
+                <div className="summary-stats">
+                  <h3>ファイル概要</h3>
+                  <div className="stats-grid">
+                    <div className="stat-item">
+                      <span className="stat-label">主な言語</span>
+                      <span className="stat-value">{analysisResult?.language}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">ファイルサイズ</span>
-                      <span className="stat-value">{formatFileSize(analysisResult.size || 0)}</span>
+                      <span className="stat-value">{formatFileSize(analysisResult?.size || 0)}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">行数</span>
-                      <span className="stat-value">{analysisResult.lines}</span>
+                      <span className="stat-value">{analysisResult?.lines}</span>
                     </div>
                   </div>
                 </div>
-                
-                {analysisResult.technologies && analysisResult.technologies.length > 0 && (
+
+                {analysisResult?.technologies && analysisResult.technologies.length > 0 && (
                   <div className="technologies-summary">
                     <h3>検出された技術</h3>
                     <div className="tech-tags">
@@ -607,83 +615,85 @@ function App() {
                     </div>
                   </div>
                 )}
-                
-                {analysisResult.structure && (
+
+                {analysisResult?.structure && (
                   <div className="structure-summary">
                     <h3>コード構造</h3>
                     <div className="structure-stats">
                       <div className="structure-item">
                         <span className="structure-label">関数</span>
-                        <span className="structure-count">{analysisResult.structure.functions.length}</span>
+                        <span className="structure-count">{analysisResult?.structure?.functions.length}</span>
                       </div>
                       <div className="structure-item">
                         <span className="structure-label">クラス</span>
-                        <span className="structure-count">{analysisResult.structure.classes.length}</span>
+                        <span className="structure-count">{analysisResult?.structure?.classes.length}</span>
                       </div>
                       <div className="structure-item">
                         <span className="structure-label">インポート</span>
-                        <span className="structure-count">{analysisResult.structure.imports.length}</span>
+                        <span className="structure-count">{analysisResult?.structure?.imports.length}</span>
                       </div>
                       <div className="structure-item">
                         <span className="structure-label">エクスポート</span>
-                        <span className="structure-count">{analysisResult.structure.exports.length}</span>
+                        <span className="structure-count">{analysisResult?.structure?.exports.length}</span>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
             )}
-            
-            {analysisResult.type === 'zip' && (
-              <div className="summary-stats">
+
+
+            {analysisResult?.type === 'zip' && (
+              <>
+                <div className="summary-stats">
                   <h3>プロジェクト概要</h3>
                   <div className="stats-grid">
                     <div className="stat-item">
                       <span className="stat-label">総ファイル数</span>
-                      <span className="stat-value">{analysisResult.totalFiles}</span>
+                      <span className="stat-value">{analysisResult?.totalFiles}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">総サイズ</span>
-                      <span className="stat-value">{formatFileSize(analysisResult.summary?.totalSize || 0)}</span>
+                      <span className="stat-value">{formatFileSize(analysisResult?.summary?.totalSize || 0)}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">総行数</span>
-                      <span className="stat-value">{analysisResult.summary?.totalLines}</span>
+                      <span className="stat-value">{analysisResult?.summary?.totalLines}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">平均ファイルサイズ</span>
-                      <span className="stat-value">{formatFileSize(analysisResult.summary?.averageFileSize || 0)}</span>
+                      <span className="stat-value">{formatFileSize(analysisResult?.summary?.averageFileSize || 0)}</span>
                     </div>
                   </div>
                 </div>
 
-                {analysisResult.summary && (
+                {analysisResult?.summary && (
                   <>
                     <div className="languages-summary">
                       <h3>使用言語</h3>
                       <div className="language-stats">
-                        {Object.entries(analysisResult.summary.languages)
-                          .sort(([,a], [,b]) => b - a)
+                        {Object.entries(analysisResult?.summary.languages || {})
+                          .sort(([, a], [, b]) => b - a)
                           .map(([lang, count]) => (
                             <div key={lang} className="language-item">
                               <span className="language-name">{lang}</span>
                               <span className="language-count">{count}ファイル</span>
                               <div className="language-bar">
-                                <div 
-                                  className="language-bar-fill" 
-                                  style={{width: `${(count / analysisResult.totalFiles!) * 100}%`}}
+                                <div
+                                  className="language-bar-fill"
+                                  style={{ width: `${(count / (analysisResult?.totalFiles || 1)) * 100}%` }}
                                 />
                               </div>
                             </div>
                           ))}
                       </div>
                     </div>
-                    
+
                     <div className="technologies-summary">
                       <h3>検出された技術</h3>
                       <div className="tech-tags">
-                        {Object.entries(analysisResult.summary.technologies)
-                          .sort(([,a], [,b]) => b - a)
+                        {Object.entries(analysisResult?.summary.technologies || {})
+                          .sort(([, a], [, b]) => b - a)
                           .map(([tech, count]) => (
                             <span key={tech} className="tech-tag">
                               {tech} ({count})
@@ -694,11 +704,11 @@ function App() {
                   </>
                 )}
 
-                {analysisResult.files && analysisResult.files.length > 0 && (
+                {analysisResult?.files && analysisResult.files.length > 0 && (
                   <div className="important-files">
                     <h3>主要ファイル</h3>
                     <div className="files-grid">
-                      {analysisResult.files
+                      {analysisResult?.files
                         .sort((a, b) => b.size - a.size)
                         .slice(0, 10)
                         .map((file, index) => (
@@ -722,12 +732,12 @@ function App() {
                           </div>
                         ))}
                     </div>
-                    {analysisResult.files.length > 10 && (
+                    {analysisResult?.files && analysisResult.files.length > 10 && (
                       <p className="more-files">他{analysisResult.files.length - 10}ファイル...</p>
                     )}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         )}
