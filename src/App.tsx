@@ -214,20 +214,73 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnaly
   };
 
   const generateReport = () => {
-    let report = "【コード分析ツール - ハイリスク・ファイルレポート】\n";
+    let report = "【コード分析ツール - 詳細リスク判定レポート】\n";
     report += `分析日時: ${new Date().toLocaleString()}\n`;
-    report += `該当件数: ${highRiskFiles.length}件\n\n`;
+    report += `該当ハイリスク件数: ${highRiskFiles.length}件\n`;
+    report += "--------------------------------------------------\n\n";
 
     highRiskFiles.forEach((f, i) => {
-      report += `${i + 1}. ${f.fileName}\n`;
-      report += `   - リスクスコア: ${f.blackboxRisk?.score}\n`;
-      report += `   - 判定理由: ${f.blackboxRisk ? getRiskReason(f.blackboxRisk) : "不明"}\n`;
-      if (f.blackboxRisk?.aiEstimation) {
-        report += `   - AI生成確率: ${f.blackboxRisk.aiEstimation.aiLikelihood}%\n`;
+      report += `${i + 1}. ファイル名: ${f.fileName}\n`;
+      report += `   総合リスクスコア: ${f.blackboxRisk?.score} / 100\n`;
+      report += `   判定: ${f.blackboxRisk?.level}\n\n`;
+
+      report += "   [詳細分析結果]\n";
+      const risk = f.blackboxRisk;
+      if (!risk) {
+        report += "   - リスクデータが取得できませんでした。\n";
+      } else {
+        // Nested Logic Detail
+        if (risk.nestingDepth) {
+          const depth = risk.nestingDepth.maxDepth;
+          report += `   ● 制御構造の複雑さ (最大ネスト数: ${depth})\n`;
+          if (depth > 5) {
+            report += `     ⇒ 最大ネスト数が${depth}に達しています。一般的に5階層を超えるとロジックの追跡が困難になり、バグの温床となります。関数の分割を検討してください。\n`;
+          } else {
+            report += `     ⇒ ネスト数は${depth}で許容範囲内ですが、他の要因と組み合わさりリスクとなっています。\n`;
+          }
+        }
+
+        // File Size Detail
+        if (risk.fileSize) {
+          const lines = risk.fileSize.lineCount;
+          report += `   ● ファイル規模 (行数: ${lines}行)\n`;
+          if (lines > 500) {
+            report += `     ⇒ 1ファイルあたりの推奨行数(500行)を大幅に超えています。単一責任原則（SRP）に基づき、コンポーネントやロジックの分離を推奨します。\n`;
+          }
+        }
+
+        // Comment/Documentation Detail
+        if (risk.commentRatio) {
+          const ratio = Math.round(risk.commentRatio.commentRatio * 100);
+          report += `   ● ドキュメント密度 (コメント率: ${ratio}%)\n`;
+          if (ratio < 10) {
+            report += `     ⇒ 複雑なロジックに対してコメントが非常に少ないです。意図の不明なコードはメンテナンスコストを増大させます。\n`;
+          }
+        }
+
+        // Unused Functions Detail
+        if (risk.unusedFunctions && risk.unusedFunctions.count > 0) {
+          report += `   ● メンテナンス性 (未使用コード: ${risk.unusedFunctions.count}件)\n`;
+          report += `     ⇒ 使用されていない関数や変数が検出されました。死んだコードの蓄積はリファクタリングを阻害します。\n`;
+        }
+
+        // AI Estimation Detail
+        if (risk.aiEstimation) {
+          const ai = risk.aiEstimation.aiLikelihood;
+          report += `   ● コードの出自 (AI生成の可能性: ${ai}%)\n`;
+          if (ai > 70) {
+            report += `     ⇒ AIによって生成された可能性が非常に高いです。特有のパターンが見られます。人間による詳細な論理検証が必須です。\n`;
+          }
+        }
       }
-      report += "\n";
+
+      report += "\n   [改善へのアドバイス]\n";
+      report += "   - コードをより小さな、テスト可能な単位に分割してください。\n";
+      report += "   - 複雑な分岐やループがある箇所に、その意図を説明するコメントを追加してください。\n";
+      report += "--------------------------------------------------\n\n";
     });
 
+    report += "以上、分析レポートを終了します。";
     return report;
   };
 
