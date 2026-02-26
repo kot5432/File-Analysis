@@ -8,6 +8,7 @@ import { estimateAIGenerated } from './lib/analysis/aiEstimation';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
 import { analyzeTechStack } from './lib/analysis/techStack';
+import { resolveImport, extractDependencies } from './lib/analysis/importResolver';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -272,7 +273,7 @@ function App() {
           // 依存関係を抽出・解決
           const dependencies = extractDependencies(file.content);
           const resolvedDependencies = dependencies
-            .map(dep => resolveImport(file.path, dep, fileMap))
+            .map((dep: string) => resolveImport(file.path, dep, fileMap))
             .filter((dep): dep is string => dep !== null);
           
           return {
@@ -600,7 +601,7 @@ function App() {
                   <div className="technologies-summary">
                     <h3>検出された技術</h3>
                     <div className="tech-tags">
-                      {analysisResult.technologies.map((tech, index) => (
+                      {analysisResult.technologies.map((tech: string, index: number) => (
                         <span key={index} className="tech-tag">{tech}</span>
                       ))}
                     </div>
