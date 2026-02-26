@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Dark background -->
+  <rect width="64" height="64" rx="10" fill="#0d1117"/>
+
+  <!-- Stacked file shadow (back) -->
+  <rect x="14" y="14" width="38" height="30" rx="3" fill="#1f3a5f" stroke="#2d5a9e" stroke-width="1.5"/>
+
+  <!-- Main file (front, landscape) -->
+  <rect x="10" y="20" width="38" height="30" rx="3" fill="#162032" stroke="#00c8ff" stroke-width="2"/>
+
+  <!-- Dog-ear top-right on front file -->
+  <polygon points="36,20 48,20 48,32" fill="#0d1117" opacity="0.7"/>
+  <line x1="36" y1="20" x2="48" y2="32" stroke="#00c8ff" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Glowing scan line -->
+  <rect x="10" y="36" width="38" height="3" rx="1" fill="#00c8ff" opacity="0.18"/>
+  <line x1="10" y1="37.5" x2="48" y2="37.5" stroke="#00c8ff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Code/text lines -->
+  <rect x="15" y="26" width="16" height="2" rx="1" fill="#00c8ff" opacity="0.7"/>
+  <rect x="15" y="31" width="22" height="2" rx="1" fill="#00c8ff" opacity="0.45"/>
+  <rect x="15" y="42" width="12" height="2" rx="1" fill="#00c8ff" opacity="0.45"/>
+  <rect x="15" y="47" width="20" height="2" rx="1" fill="#00c8ff" opacity="0.3"/>
+
+  <!-- Magnifying glass (bottom-right) -->
+  <circle cx="46" cy="46" r="7" fill="#0d1117" stroke="#00c8ff" stroke-width="2"/>
+  <circle cx="46" cy="46" r="4" fill="none" stroke="#00c8ff" stroke-width="1.5"/>
+  <line x1="50" y1="50" x2="54" y2="54" stroke="#00c8ff" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
