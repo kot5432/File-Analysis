@@ -184,6 +184,50 @@ function App() {
     event.preventDefault();
   };
 
+  // ZIP展開関数
+  const extractZipFile = async (file: File): Promise<{ path: string; content: string }[]> => {
+    return new Promise((resolve, reject) => {
+      const JSZip = require('jszip');
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const zip = new JSZip();
+          const contents = await zip.loadAsync(e.target?.result as ArrayBuffer);
+          const files: { path: string; content: string }[] = [];
+          
+          for (const [relativePath, fileData] of Object.entries(contents.files)) {
+            // ディレクトリは除外
+            if ((fileData as any).dir) continue;
+            
+            // node_modules と不要なファイルを除外
+            if (relativePath.includes('node_modules/') || 
+                relativePath.includes('.git/') ||
+                relativePath.includes('dist/') ||
+                relativePath.includes('build/')) continue;
+            
+            // サポートされているファイルのみ処理
+            const ext = '.' + relativePath.split('.').pop()?.toLowerCase();
+            if (isSupportedFile(relativePath)) {
+              const content = await (fileData as any).async('string');
+              files.push({
+                path: relativePath,
+                content
+              });
+            }
+          }
+          
+          resolve(files);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      reader.onerror = () => reject(new Error('ファイル読み込みに失敗しました'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const analyzeFile = async () => {
     if (!selectedFile) return;
 
@@ -191,38 +235,90 @@ function App() {
     setError(null);
 
     try {
-      // ファイル内容を読み込んで分析
-      const content = await selectedFile.text();
-      const lines = content.split('\n').length;
+      // ZIPファイルかチェック
+      const isZip = selectedFile.name.toLowerCase().endsWith('.zip');
       
-      // 言語検出
-      const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
-      const language = detectLanguage(ext);
-      
-      // 技術スタック検出
-      const technologies = detectTechnologies(content, language);
-      
-      // ブラックボックスリスク分析（新バージョン）
-      const blackboxRisk = analyzeBlackboxRisk(content);
-      
-      // 結果を設定
-      const result: AnalysisResult = {
-        type: 'single',
-        fileName: selectedFile.name,
-        language,
-        technologies,
-        size: selectedFile.size,
-        lines,
-        blackboxRisk,
-        structure: {
-          functions: extractFunctions(content),
-          classes: extractClasses(content),
-          imports: extractImports(content),
-          exports: extractExports(content)
-        }
-      };
-      
-      setAnalysisResult(result);
+      if (isZip) {
+        // ZIP展開して分析
+        const extractedFiles = await extractZipFile(selectedFile);
+        
+        // 各ファイルを分析
+        const analyzedFiles = extractedFiles.map(file => {
+          const language = detectLanguage(file.path);
+          const technologies = detectTechnologies(file.content, language);
+          
+          return {
+            fileName: file.path,
+            language,
+            technologies,
+            size: file.content.length,
+            lines: file.content.split('\n').length,
+            structure: {
+              functions: extractFunctions(file.content),
+              classes: extractClasses(file.content),
+              imports: extractImports(file.content),
+              exports: extractExports(file.content)
+            }
+          };
+        });
+        
+        // 集計結果
+        const languageCounts: { [key: string]: number } = {};
+        const technologyCounts: { [key: string]: number } = {};
+        
+        analyzedFiles.forEach(file => {
+          languageCounts[file.language] = (languageCounts[file.language] || 0) + 1;
+          file.technologies.forEach(tech => {
+            technologyCounts[tech] = (technologyCounts[tech] || 0) + 1;
+          });
+        });
+        
+        const summary = {
+          totalFiles: extractedFiles.length,
+          totalLines: analyzedFiles.reduce((sum, f) => sum + f.lines, 0),
+          totalSize: analyzedFiles.reduce((sum, f) => sum + f.size, 0),
+          averageFileSize: Math.round(analyzedFiles.reduce((sum, f) => sum + f.size, 0) / analyzedFiles.length),
+          languages: languageCounts,
+          technologies: technologyCounts
+        };
+        
+        const result: AnalysisResult = {
+          type: 'zip',
+          fileName: selectedFile.name,
+          totalFiles: extractedFiles.length,
+          files: analyzedFiles,
+          summary
+        };
+        
+        setAnalysisResult(result);
+      } else {
+        // 単一ファイル分析（既存処理）
+        const content = await selectedFile.text();
+        const lines = content.split('\n').length;
+        
+        const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
+        const language = detectLanguage(ext);
+        const technologies = detectTechnologies(content, language);
+        const blackboxRisk = analyzeBlackboxRisk(content);
+        
+        const result: AnalysisResult = {
+          type: 'single',
+          fileName: selectedFile.name,
+          language,
+          technologies,
+          size: selectedFile.size,
+          lines,
+          blackboxRisk,
+          structure: {
+            functions: extractFunctions(content),
+            classes: extractClasses(content),
+            imports: extractImports(content),
+            exports: extractExports(content)
+          }
+        };
+        
+        setAnalysisResult(result);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
     } finally {
