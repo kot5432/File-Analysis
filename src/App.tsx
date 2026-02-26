@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import { analyzeNestingDepth } from './lib/analysis/nesting';
 import { analyzeCommentRatio } from './lib/analysis/commentRatio';
@@ -72,7 +72,69 @@ interface AnalysisResult {
   blackboxRisk?: BlackboxRisk;
 }
 
+interface AnalysisHistory {
+  id: string;
+  fileName: string;
+  analyzedAt: string;
+  riskScore: number;
+  aiLikelihood: number;
+  languages: string[];
+  technologies: string[];
+  fullResult: AnalysisResult;
+}
+
 // --- Utils ---
+
+// 履歴管理ユーティリティ
+const HISTORY_KEY = 'analysis_history';
+const MAX_HISTORY_ITEMS = 20;
+
+const saveToHistory = (result: AnalysisResult) => {
+  try {
+    const history: AnalysisHistory[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    
+    const newHistoryItem: AnalysisHistory = {
+      id: Date.now().toString(),
+      fileName: result.fileName || result.files?.[0]?.fileName || 'Unknown',
+      analyzedAt: new Date().toISOString(),
+      riskScore: result.blackboxRisk?.score || 0,
+      aiLikelihood: result.blackboxRisk?.aiEstimation?.aiLikelihood || 0,
+      languages: result.language ? [result.language] : Object.keys(result.summary?.languages || {}),
+      technologies: result.technologies || Object.keys(result.summary?.technologies || {}),
+      fullResult: result
+    };
+    
+    history.unshift(newHistoryItem);
+    
+    // FIFO: 最大件数を超えたら最古を削除
+    if (history.length > MAX_HISTORY_ITEMS) {
+      history.splice(MAX_HISTORY_ITEMS);
+    }
+    
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (error) {
+    console.error('履歴の保存に失敗しました:', error);
+  }
+};
+
+const getHistory = (): AnalysisHistory[] => {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch (error) {
+    console.error('履歴の取得に失敗しました:', error);
+    return [];
+  }
+};
+
+const deleteFromHistory = (id: string) => {
+  try {
+    const history: AnalysisHistory[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    const filteredHistory = history.filter(item => item.id !== id);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(filteredHistory));
+  } catch (error) {
+    console.error('履歴の削除に失敗しました:', error);
+  }
+};
 
 const formatFileSize = (bytes: number) => {
   if (bytes === 0) return '0 Bytes';
@@ -394,6 +456,8 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<AnalysisHistory[]>([]);
 
   const SUPPORTED_EXTENSIONS = [
     '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.xml', '.php', '.py', '.java',
@@ -403,6 +467,33 @@ function App() {
   ];
 
   const isSupportedFile = (name: string) => SUPPORTED_EXTENSIONS.includes('.' + name.split('.').pop()?.toLowerCase());
+
+  // 履歴読み込み
+  useEffect(() => {
+    setHistory(getHistory());
+  }, []);
+
+  // 履歴保存
+  useEffect(() => {
+    if (analysisResult) {
+      saveToHistory(analysisResult);
+      setHistory(getHistory());
+    }
+  }, [analysisResult]);
+
+  // 履歴削除
+  const handleDeleteHistory = (id: string) => {
+    if (window.confirm('この履歴を削除してもよろしいですか？')) {
+      deleteFromHistory(id);
+      setHistory(getHistory());
+    }
+  };
+
+  // 履歴詳細表示
+  const handleShowHistoryDetail = (historyItem: AnalysisHistory) => {
+    setAnalysisResult(historyItem.fullResult);
+    setShowHistory(false);
+  };
 
   const analyzeBlackboxRisk = (content: string): BlackboxRisk => {
     const nesting = analyzeNestingDepth(content);
@@ -499,6 +590,23 @@ function App() {
       <header className="App-header">
         <h1>コード分析ツール</h1>
         <p>AIコーディングツールのブラックボックス化を解消するファイル分析システム</p>
+        <button 
+          onClick={() => setShowHistory(!showHistory)} 
+          className="history-button"
+          style={{ 
+            position: 'absolute', 
+            right: '20px', 
+            top: '20px',
+            padding: '8px 16px',
+            backgroundColor: '#1890ff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}
+        >
+          履歴 ({history.length})
+        </button>
       </header>
 
       <main className="App-main">
@@ -588,6 +696,156 @@ function App() {
                     </>
                   )}
                 </>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* 履歴一覧 */}
+        {showHistory && (
+          <div className="history-overlay" style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(0,0,0,0.5)', 
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div className="history-content" style={{ 
+              backgroundColor: 'white', 
+              borderRadius: '8px', 
+              padding: '24px', 
+              maxWidth: '800px', 
+              maxHeight: '80vh', 
+              overflow: 'auto',
+              width: '90%'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h2>解析履歴</h2>
+                <button 
+                  onClick={() => setShowHistory(false)}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    fontSize: '24px', 
+                    cursor: 'pointer' 
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              
+              {history.length === 0 ? (
+                <p>履歴がありません</p>
+              ) : (
+                <div className="history-grid" style={{ display: 'grid', gap: '16px' }}>
+                  {history.map((item) => (
+                    <div 
+                      key={item.id}
+                      className="history-card"
+                      style={{ 
+                        border: '1px solid #d9d9d9', 
+                        borderRadius: '8px', 
+                        padding: '16px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => handleShowHistoryDetail(item)}
+                      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'}
+                      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>{item.fileName}</h4>
+                          <p style={{ margin: 0, color: '#666', fontSize: '12px' }}>
+                            {new Date(item.analyzedAt).toLocaleString('ja-JP')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteHistory(item.id);
+                          }}
+                          style={{
+                            background: '#ff4d4f',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          削除
+                        </button>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <span 
+                          className="risk-badge"
+                          style={{ 
+                            backgroundColor: item.riskScore >= 70 ? '#ff4d4f' : item.riskScore >= 40 ? '#faad14' : '#52c41a',
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          リスク: {item.riskScore}
+                        </span>
+                        <span 
+                          className="ai-badge"
+                          style={{ 
+                            backgroundColor: item.aiLikelihood >= 70 ? '#ff4d4f' : item.aiLikelihood >= 40 ? '#faad14' : '#52c41a',
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          AI: {item.aiLikelihood}%
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {item.languages.slice(0, 3).map(lang => (
+                          <span 
+                            key={lang}
+                            className="lang-tag"
+                            style={{ 
+                              backgroundColor: '#f0f0f0', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              fontSize: '10px' 
+                            }}
+                          >
+                            {lang}
+                          </span>
+                        ))}
+                        {item.technologies.slice(0, 3).map(tech => (
+                          <span 
+                            key={tech}
+                            className="tech-tag"
+                            style={{ 
+                              backgroundColor: '#e6f7ff', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              fontSize: '10px' 
+                            }}
+                          >
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
