@@ -401,3 +401,156 @@
     padding: 30px 20px;
   }
 }
+
+/* ブラックボックスリスク表示 */
+.blackbox-risk-section {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid #e9ecef;
+}
+
+.blackbox-risk-section h3 {
+  color: #495057;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.risk-gauge-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.risk-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.risk-score {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  position: relative;
+  border: 4px solid;
+}
+
+.risk-score.high {
+  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+  border-color: #ff6b6b;
+  color: white;
+}
+
+.risk-score.medium {
+  background: linear-gradient(135deg, #ffd93d, #ffb347);
+  border-color: #ffd93d;
+  color: #333;
+}
+
+.risk-score.low {
+  background: linear-gradient(135deg, #6bcf7f, #4caf50);
+  border-color: #6bcf7f;
+  color: white;
+}
+
+.risk-number {
+  font-size: 2.5rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.risk-label {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.level-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.level-badge.high {
+  background: #ff6b6b;
+  color: white;
+}
+
+.level-badge.medium {
+  background: #ffd93d;
+  color: #333;
+}
+
+.level-badge.low {
+  background: #6bcf7f;
+  color: white;
+}
+
+.risk-breakdown {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.risk-breakdown h4 {
+  color: #495057;
+  margin-bottom: 16px;
+  font-size: 1rem;
+}
+
+.breakdown-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid #007bff;
+}
+
+.item-label {
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.item-score {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 0.9rem;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .risk-gauge {
+    transform: scale(0.9);
+  }
+  
+  .breakdown-items {
+    grid-template-columns: 1fr;
+  }
+  
+  .blackbox-risk-section {
+    padding: 16px;
+  }
+}

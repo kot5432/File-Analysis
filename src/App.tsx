@@ -12,6 +12,22 @@ interface AnalysisResult {
   size?: number;
   lines?: number;
   structure?: CodeStructure;
+  blackboxRisk?: BlackboxRisk;
+}
+
+interface BlackboxRisk {
+  score: number;
+  level: 'LOW' | 'MEDIUM' | 'HIGH';
+  breakdown: RiskBreakdown;
+}
+
+interface RiskBreakdown {
+  fileSize: number;
+  functionLength: number;
+  nestingDepth: number;
+  commentRate: number;
+  unusedCode: number;
+  typeSafety: number;
 }
 
 interface FileAnalysis {
@@ -60,6 +76,91 @@ function App() {
     return SUPPORTED_EXTENSIONS.includes(ext);
   };
 
+  // ブラックボックスリスク分析関数
+  const analyzeBlackboxRisk = (content: string, lines: number): BlackboxRisk => {
+    const breakdown: RiskBreakdown = {
+      fileSize: calculateFileSizeRisk(lines),
+      functionLength: calculateFunctionLengthRisk(content),
+      nestingDepth: calculateNestingDepthRisk(content),
+      commentRate: calculateCommentRateRisk(content, lines),
+      unusedCode: calculateUnusedCodeRisk(content),
+      typeSafety: calculateTypeSafetyRisk(content)
+    };
+
+    const totalScore = Object.values(breakdown).reduce((sum, score) => sum + score, 0);
+    const level = totalScore >= 70 ? 'HIGH' : totalScore >= 40 ? 'MEDIUM' : 'LOW';
+
+    return { score: totalScore, level, breakdown };
+  };
+
+  // 各リスク要因の計算関数
+  const calculateFileSizeRisk = (lines: number): number => {
+    if (lines > 1000) return 20;
+    if (lines > 500) return 10;
+    return 0;
+  };
+
+  const calculateNestingDepthRisk = (content: string): number => {
+    let maxDepth = 0;
+    let currentDepth = 0;
+    
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const openBraces = (line.match(/{/g) || []).length;
+      const closeBraces = (line.match(/}/g) || []).length;
+      
+      currentDepth += openBraces - closeBraces;
+      maxDepth = Math.max(maxDepth, currentDepth);
+    }
+    
+    if (maxDepth >= 5) return 15;
+    if (maxDepth >= 3) return 8;
+    return 0;
+  };
+
+  const calculateCommentRateRisk = (content: string, totalLines: number): number => {
+    const commentLines = content.split('\n').filter(line => 
+      line.trim().startsWith('//') || 
+      line.trim().startsWith('/*') || 
+      line.trim().startsWith('*') ||
+      line.trim().startsWith('#') ||
+      line.trim().match(/\/\*.*\*\//)
+    ).length;
+    
+    const commentRate = commentLines / totalLines;
+    
+    if (commentRate < 0.05) return 15;
+    if (commentRate < 0.10) return 8;
+    return 0;
+  };
+
+  const calculateFunctionLengthRisk = (content: string): number => {
+    const functions = content.match(/function\s+\w+|=>\s*{|\w+\s*:\s*function/g) || [];
+    
+    // 簡易的な関数長計算（MVP）
+    const avgLength = functions.length > 0 ? Math.floor(content.split('\n').length / functions.length) : 0;
+    
+    if (avgLength > 50) return 20;
+    if (avgLength > 30) return 10;
+    return 0;
+  };
+
+  const calculateUnusedCodeRisk = (content: string): number => {
+    // 簡易的な未使用関数検出（MVP）
+    const functionNames = content.match(/function\s+(\w+)|const\s+(\w+)\s*=/g) || [];
+    return functionNames.length > 10 ? 10 : 5;
+  };
+
+  const calculateTypeSafetyRisk = (content: string): number => {
+    const anyCount = (content.match(/: any/g) || []).length;
+    const totalTypes = (content.match(/: \w+/g) || []).length;
+    
+    if (totalTypes === 0) return 0;
+    const anyRate = anyCount / totalTypes;
+    
+    return anyRate > 0.3 ? 10 : anyRate > 0.1 ? 5 : 0;
+  };
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -99,26 +200,120 @@ function App() {
     setIsAnalyzing(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
     try {
-      const response = await fetch('http://localhost:5000/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('分析に失敗しました');
-      }
-
-      const result = await response.json();
-      setAnalysisResult(result.analysis);
+      // ファイル内容を読み込んで分析
+      const content = await selectedFile.text();
+      const lines = content.split('\n').length;
+      
+      // 言語検出
+      const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
+      const language = detectLanguage(ext);
+      
+      // 技術スタック検出
+      const technologies = detectTechnologies(content, language);
+      
+      // ブラックボックスリスク分析
+      const blackboxRisk = analyzeBlackboxRisk(content, lines);
+      
+      // 結果を設定
+      const result: AnalysisResult = {
+        type: 'single',
+        fileName: selectedFile.name,
+        language,
+        technologies,
+        size: selectedFile.size,
+        lines,
+        blackboxRisk,
+        structure: {
+          functions: extractFunctions(content),
+          classes: extractClasses(content),
+          imports: extractImports(content),
+          exports: extractExports(content)
+        }
+      };
+      
+      setAnalysisResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // 補助関数
+  const detectLanguage = (ext: string): string => {
+    const languageMap: { [key: string]: string } = {
+      '.js': 'JavaScript',
+      '.ts': 'TypeScript',
+      '.jsx': 'React JSX',
+      '.tsx': 'TypeScript React',
+      '.py': 'Python',
+      '.java': 'Java',
+      '.cpp': 'C++',
+      '.c': 'C',
+      '.cs': 'C#',
+      '.php': 'PHP',
+      '.rb': 'Ruby',
+      '.go': 'Go',
+      '.rs': 'Rust',
+      '.swift': 'Swift',
+      '.kt': 'Kotlin',
+      '.html': 'HTML',
+      '.css': 'CSS',
+      '.json': 'JSON',
+      '.xml': 'XML',
+      '.yaml': 'YAML',
+      '.yml': 'YAML',
+      '.sql': 'SQL',
+      '.sh': 'Shell Script'
+    };
+    return languageMap[ext] || 'Unknown';
+  };
+
+  const detectTechnologies = (content: string, language: string): string[] => {
+    const technologies: string[] = [];
+    
+    // React
+    if (content.includes('import React') || content.includes('from "react"')) {
+      technologies.push('React');
+    }
+    
+    // Node.js
+    if (content.includes('require(') || content.includes('import ')) {
+      technologies.push('Node.js');
+    }
+    
+    // TypeScript
+    if (language === 'TypeScript' || language === 'TypeScript React') {
+      technologies.push('TypeScript');
+    }
+    
+    // Express
+    if (content.includes('express') || content.includes('app.get') || content.includes('app.post')) {
+      technologies.push('Express.js');
+    }
+    
+    return technologies;
+  };
+
+  const extractFunctions = (content: string): string[] => {
+    const matches = content.match(/function\s+(\w+)|const\s+(\w+)\s*=.*=>|(\w+)\s*:\s*function/g) || [];
+    return matches.map(match => match.replace(/function\s+|const\s+|:\s*function|=>.*/g, '').trim());
+  };
+
+  const extractClasses = (content: string): string[] => {
+    const matches = content.match(/class\s+(\w+)/g) || [];
+    return matches.map(match => match.replace('class ', ''));
+  };
+
+  const extractImports = (content: string): string[] => {
+    const matches = content.match(/import\s+.*from\s+['"]([^'"]+)['"]/g) || [];
+    return matches.map(match => match.match(/from\s+['"]([^'"]+)['"]/)?.[1] || '');
+  };
+
+  const extractExports = (content: string): string[] => {
+    const matches = content.match(/export\s+(default\s+)?(\w+)/g) || [];
+    return matches.map(match => match.replace(/export\s+(default\s+)?/, ''));
   };
 
   const formatFileSize = (bytes: number) => {
@@ -182,6 +377,56 @@ function App() {
         {analysisResult && (
           <div className="results-section">
             <h2>分析結果</h2>
+            
+            {/* ブラックボックスリスク表示 */}
+            {analysisResult.blackboxRisk && (
+              <div className="blackbox-risk-section">
+                <h3>⚠️ ブラックボックスリスク分析</h3>
+                <div className="risk-gauge-container">
+                  <div className="risk-gauge">
+                    <div className={`risk-score ${analysisResult.blackboxRisk.level.toLowerCase()}`}>
+                      <div className="risk-number">{analysisResult.blackboxRisk.score}</div>
+                      <div className="risk-label">Blackbox Risk</div>
+                    </div>
+                    <div className="risk-level">
+                      <span className={`level-badge ${analysisResult.blackboxRisk.level.toLowerCase()}`}>
+                        {analysisResult.blackboxRisk.level}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="risk-breakdown">
+                  <h4>リスク内訳</h4>
+                  <div className="breakdown-items">
+                    <div className="breakdown-item">
+                      <span className="item-label">ファイル肥大</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.fileSize}</span>
+                    </div>
+                    <div className="breakdown-item">
+                      <span className="item-label">関数の長さ</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.functionLength}</span>
+                    </div>
+                    <div className="breakdown-item">
+                      <span className="item-label">ネスト深度</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.nestingDepth}</span>
+                    </div>
+                    <div className="breakdown-item">
+                      <span className="item-label">コメント率</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.commentRate}</span>
+                    </div>
+                    <div className="breakdown-item">
+                      <span className="item-label">未使用コード</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.unusedCode}</span>
+                    </div>
+                    <div className="breakdown-item">
+                      <span className="item-label">型安全性</span>
+                      <span className="item-score">+{analysisResult.blackboxRisk.breakdown.typeSafety}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {analysisResult.type === 'single' ? (
               <div className="summary-result">
