@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './App.css';
+import { analyzeNestingDepth } from './lib/analysis/nesting';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -19,6 +20,10 @@ interface BlackboxRisk {
   score: number;
   level: 'LOW' | 'MEDIUM' | 'HIGH';
   breakdown: RiskBreakdown;
+  nestingDepth?: {
+    maxDepth: number;
+    riskScore: number;
+  };
 }
 
 interface RiskBreakdown {
@@ -78,10 +83,13 @@ function App() {
 
   // ブラックボックスリスク分析関数
   const analyzeBlackboxRisk = (content: string, lines: number): BlackboxRisk => {
+    // ネスト深度分析
+    const nestingResult = analyzeNestingDepth(content);
+    
     const breakdown: RiskBreakdown = {
       fileSize: calculateFileSizeRisk(lines),
       functionLength: calculateFunctionLengthRisk(content),
-      nestingDepth: calculateNestingDepthRisk(content),
+      nestingDepth: nestingResult.riskScore, // 新しい関数を使用
       commentRate: calculateCommentRateRisk(content, lines),
       unusedCode: calculateUnusedCodeRisk(content),
       typeSafety: calculateTypeSafetyRisk(content)
@@ -90,31 +98,18 @@ function App() {
     const totalScore = Object.values(breakdown).reduce((sum, score) => sum + score, 0);
     const level = totalScore >= 70 ? 'HIGH' : totalScore >= 40 ? 'MEDIUM' : 'LOW';
 
-    return { score: totalScore, level, breakdown };
+    return { 
+      score: totalScore, 
+      level, 
+      breakdown,
+      nestingDepth: nestingResult // 詳細情報も保持
+    };
   };
 
   // 各リスク要因の計算関数
   const calculateFileSizeRisk = (lines: number): number => {
     if (lines > 1000) return 20;
     if (lines > 500) return 10;
-    return 0;
-  };
-
-  const calculateNestingDepthRisk = (content: string): number => {
-    let maxDepth = 0;
-    let currentDepth = 0;
-    
-    const lines = content.split('\n');
-    for (const line of lines) {
-      const openBraces = (line.match(/{/g) || []).length;
-      const closeBraces = (line.match(/}/g) || []).length;
-      
-      currentDepth += openBraces - closeBraces;
-      maxDepth = Math.max(maxDepth, currentDepth);
-    }
-    
-    if (maxDepth >= 5) return 15;
-    if (maxDepth >= 3) return 8;
     return 0;
   };
 
@@ -411,6 +406,11 @@ function App() {
                       <span className="item-label">ネスト深度</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.nestingDepth}</span>
                     </div>
+                    {analysisResult.blackboxRisk.nestingDepth && (
+                      <div className="nesting-detail">
+                        <span className="detail-label">最大深度: {analysisResult.blackboxRisk.nestingDepth.maxDepth}</span>
+                      </div>
+                    )}
                     <div className="breakdown-item">
                       <span className="item-label">コメント率</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.commentRate}</span>

@@ -540,6 +540,21 @@
   font-size: 0.9rem;
 }
 
+.nesting-detail {
+  grid-column: 1 / -1;
+  background: #e3f2fd;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 4px solid #2196f3;
+  margin-top: 4px;
+}
+
+.detail-label {
+  font-size: 0.85rem;
+  color: #1565c0;
+  font-weight: 500;
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
   .risk-gauge {
