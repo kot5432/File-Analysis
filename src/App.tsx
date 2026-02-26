@@ -3,6 +3,7 @@ import './App.css';
 import { analyzeNestingDepth } from './lib/analysis/nesting';
 import { analyzeCommentRatio } from './lib/analysis/commentRatio';
 import { analyzeFileSize } from './lib/analysis/fileSize';
+import { detectUnusedFunctions } from './lib/analysis/unusedFunctions';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
 
@@ -36,6 +37,11 @@ interface BlackboxRisk {
   };
   fileSize?: {
     lineCount: number;
+    riskScore: number;
+  };
+  unusedFunctions?: {
+    unusedFunctions: string[];
+    count: number;
     riskScore: number;
   };
 }
@@ -101,12 +107,14 @@ function App() {
     const nestingResult = analyzeNestingDepth(content);
     const commentResult = analyzeCommentRatio(content);
     const fileSizeResult = analyzeFileSize(content);
+    const unusedFunctionsResult = detectUnusedFunctions(content);
     
     // 総合スコアを計算
     const riskResult = calculateBlackboxRisk({
       nestingScore: nestingResult.riskScore,
       commentScore: commentResult.riskScore,
-      fileSizeScore: fileSizeResult.riskScore
+      fileSizeScore: fileSizeResult.riskScore,
+      unusedFunctionsScore: unusedFunctionsResult.riskScore
     });
 
     return { 
@@ -117,12 +125,13 @@ function App() {
         functionLength: 0, // 今後実装
         nestingDepth: riskResult.breakdown.nesting,
         commentRate: riskResult.breakdown.comments,
-        unusedCode: 0, // 今後実装
+        unusedCode: riskResult.breakdown.unusedFunctions, // 新しい指標を使用
         typeSafety: 0 // 今後実装
       },
       nestingDepth: nestingResult,
       commentRatio: commentResult,
-      fileSize: fileSizeResult
+      fileSize: fileSizeResult,
+      unusedFunctions: unusedFunctionsResult // 詳細情報も保持
     };
   };
 
@@ -397,6 +406,20 @@ function App() {
                       <span className="item-label">未使用コード</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.unusedCode}</span>
                     </div>
+                    {analysisResult.blackboxRisk.unusedFunctions && (
+                      <div className="unused-functions-detail">
+                        <span className="detail-label">
+                          🧹 Dead Code Risk: {analysisResult.blackboxRisk.unusedFunctions.count}個の未使用関数
+                        </span>
+                        {analysisResult.blackboxRisk.unusedFunctions.unusedFunctions.length > 0 && (
+                          <div className="unused-functions-list">
+                            {analysisResult.blackboxRisk.unusedFunctions.unusedFunctions.map((func, index) => (
+                              <span key={index} className="unused-function-item">{func}()</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="breakdown-item">
                       <span className="item-label">型安全性</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.typeSafety}</span>

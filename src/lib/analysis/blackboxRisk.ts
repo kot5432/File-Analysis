@@ -2,15 +2,17 @@ type BlackboxInput = {
   nestingScore: number
   commentScore: number
   fileSizeScore: number
+  unusedFunctionsScore: number
 }
 
 export function calculateBlackboxRisk(input: BlackboxInput) {
   const rawTotal =
     input.nestingScore +
     input.commentScore +
-    input.fileSizeScore
+    input.fileSizeScore +
+    input.unusedFunctionsScore
 
-  const MAX_RAW = 50
+  const MAX_RAW = 65
 
   // 100点スケールに正規化
   const blackboxScore = Math.round((rawTotal / MAX_RAW) * 100)
@@ -26,7 +28,8 @@ export function calculateBlackboxRisk(input: BlackboxInput) {
     breakdown: {
       nesting: input.nestingScore,
       comments: input.commentScore,
-      fileSize: input.fileSizeScore
+      fileSize: input.fileSizeScore,
+      unusedFunctions: input.unusedFunctionsScore
     }
   }
 }
