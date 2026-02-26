@@ -197,12 +197,20 @@ const StructureStats: React.FC<{ structure: CodeStructure }> = ({ structure }) =
   </div>
 );
 
-const HighRiskSummary: React.FC<{ files: FileAnalysis[] }> = ({ files }) => {
+const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => {
   const highRiskFiles = files
     .filter(f => f.blackboxRisk?.level === 'HIGH')
     .sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
 
   if (highRiskFiles.length === 0) return null;
+
+  const getRiskReason = (risk: BlackboxRisk) => {
+    if (risk.aiEstimation && risk.aiEstimation.aiLikelihood > 70) return "AI生成の可能性が高い";
+    if (risk.nestingDepth && risk.nestingDepth.maxDepth > 5) return "コードの複雑度が高い";
+    if (risk.fileSize && risk.fileSize.lineCount > 500) return "ファイルが肥大化しています";
+    if (risk.unusedFunctions && risk.unusedFunctions.count > 5) return "未使用コード（死んだコード）が多い";
+    return "総合的な複雑性が高い";
+  };
 
   return (
     <div className="high-risk-summary" style={{ backgroundColor: '#fff1f0', border: '1px solid #ffa39e', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
@@ -210,8 +218,11 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[] }> = ({ files }) => {
       <p style={{ fontSize: '0.9rem', marginBottom: '12px' }}>複雑性が高く、AI生成の可能性が高い、または修正が困難な可能性のあるファイルです：</p>
       <div className="high-risk-list">
         {highRiskFiles.slice(0, 3).map((file, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < 2 && i < highRiskFiles.length - 1 ? '1px solid #ffccc7' : 'none' }}>
-            <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{file.fileName}</span>
+          <div key={i} onClick={() => onSelect(file)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < 2 && i < highRiskFiles.length - 1 ? '1px solid #ffccc7' : 'none', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{file.fileName}</span>
+              <span style={{ fontSize: '0.75rem', color: '#cf1322' }}>{file.blackboxRisk ? getRiskReason(file.blackboxRisk) : ""}</span>
+            </div>
             <span style={{ color: '#cf1322', fontWeight: 'bold' }}>Score: {file.blackboxRisk?.score}</span>
           </div>
         ))}
@@ -223,12 +234,12 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[] }> = ({ files }) => {
   );
 };
 
-const FileGrid: React.FC<{ files: FileAnalysis[] }> = ({ files }) => (
+const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => (
   <div className="important-files">
     <h3>主要ファイル</h3>
     <div className="files-grid">
       {files.sort((a, b) => b.size - a.size).slice(0, 10).map((file, i) => (
-        <div key={i} className="file-card">
+        <div key={i} className="file-card" onClick={() => onSelect(file)} style={{ cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <h4 style={{ margin: 0, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.fileName}</h4>
             <RiskBadge risk={file.blackboxRisk} />
@@ -253,8 +264,38 @@ const FileGrid: React.FC<{ files: FileAnalysis[] }> = ({ files }) => (
 
 // --- Main App Component ---
 
+const FileDetailView: React.FC<{ file: FileAnalysis; onBack: () => void }> = ({ file, onBack }) => (
+  <div className="file-detail-view" style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+    <button onClick={onBack} style={{ marginBottom: '16px', background: 'none', border: 'none', color: '#4a90e2', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center' }}>
+      ← 一覧に戻る
+    </button>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+      <div>
+        <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{file.fileName}</h2>
+        <div style={{ marginTop: '8px', color: '#666' }}>
+          <span>{file.language}</span> • <span>{formatFileSize(file.size)}</span> • <span>{file.lines}行</span>
+        </div>
+      </div>
+      <RiskBadge risk={file.blackboxRisk} />
+    </div>
+
+    {file.blackboxRisk && <RiskAnalysisView risk={file.blackboxRisk} />}
+    <StructureStats structure={file.structure} />
+
+    {file.technologies.length > 0 && (
+      <div className="technologies-summary" style={{ marginTop: '24px' }}>
+        <h3>検出された技術</h3>
+        <div className="tech-tags">
+          {file.technologies.map((t, i) => <span key={i} className="tech-tag">{t}</span>)}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileInZip, setSelectedFileInZip] = useState<FileAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -443,8 +484,14 @@ function App() {
               {analysisResult.structure && <StructureStats structure={analysisResult.structure} />}
               {analysisResult.files && (
                 <>
-                  <HighRiskSummary files={analysisResult.files} />
-                  <FileGrid files={analysisResult.files} />
+                  {selectedFileInZip ? (
+                    <FileDetailView file={selectedFileInZip} onBack={() => setSelectedFileInZip(null)} />
+                  ) : (
+                    <>
+                      <HighRiskSummary files={analysisResult.files} onSelect={setSelectedFileInZip} />
+                      <FileGrid files={analysisResult.files} onSelect={setSelectedFileInZip} />
+                    </>
+                  )}
                 </>
               )}
             </div>
