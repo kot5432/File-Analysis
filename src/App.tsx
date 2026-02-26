@@ -198,6 +198,7 @@ const StructureStats: React.FC<{ structure: CodeStructure }> = ({ structure }) =
 );
 
 const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => {
+  const [copied, setCopied] = React.useState(false);
   const highRiskFiles = files
     .filter(f => f.blackboxRisk?.level === 'HIGH')
     .sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
@@ -212,9 +213,50 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnaly
     return "総合的な複雑性が高い";
   };
 
+  const generateReport = () => {
+    let report = "【コード分析ツール - ハイリスク・ファイルレポート】\n";
+    report += `分析日時: ${new Date().toLocaleString()}\n`;
+    report += `該当件数: ${highRiskFiles.length}件\n\n`;
+
+    highRiskFiles.forEach((f, i) => {
+      report += `${i + 1}. ${f.fileName}\n`;
+      report += `   - リスクスコア: ${f.blackboxRisk?.score}\n`;
+      report += `   - 判定理由: ${f.blackboxRisk ? getRiskReason(f.blackboxRisk) : "不明"}\n`;
+      if (f.blackboxRisk?.aiEstimation) {
+        report += `   - AI生成確率: ${f.blackboxRisk.aiEstimation.aiLikelihood}%\n`;
+      }
+      report += "\n";
+    });
+
+    return report;
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(generateReport());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="high-risk-summary" style={{ backgroundColor: '#fff1f0', border: '1px solid #ffa39e', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
-      <h3 style={{ color: '#cf1322', marginTop: 0 }}>🚨 ハイリスク・ファイル検知 ({highRiskFiles.length}件)</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <h3 style={{ color: '#cf1322', margin: 0 }}>🚨 ハイリスク・ファイル検知 ({highRiskFiles.length}件)</h3>
+        <button
+          onClick={handleCopy}
+          style={{
+            backgroundColor: copied ? '#52c41a' : '#cf1322',
+            color: '#fff',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '0.85rem',
+            transition: 'background-color 0.3s'
+          }}
+        >
+          {copied ? 'コピーしました！' : 'レポートをコピー'}
+        </button>
+      </div>
       <p style={{ fontSize: '0.9rem', marginBottom: '12px' }}>複雑性が高く、AI生成の可能性が高い、または修正が困難な可能性のあるファイルです：</p>
       <div className="high-risk-list">
         {highRiskFiles.slice(0, 3).map((file, i) => (
