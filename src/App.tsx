@@ -7,6 +7,7 @@ import { detectUnusedFunctions } from './lib/analysis/unusedFunctions';
 import { estimateAIGenerated } from './lib/analysis/aiEstimation';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
+import { resolveImport, extractDependencies } from './lib/analysis/importResolver';
 
 interface AnalysisResult {
   type: 'single' | 'zip';
@@ -68,6 +69,8 @@ interface FileAnalysis {
   size: number;
   lines: number;
   structure: CodeStructure;
+  dependencies?: string[];
+  resolvedDependencies?: string[];
 }
 
 interface CodeStructure {
@@ -241,11 +244,22 @@ function App() {
       if (isZip) {
         // ZIP展開して分析
         const extractedFiles = await extractZipFile(selectedFile);
+        const fileMap = extractedFiles.reduce((map, file) => {
+          const normalized = file.path.replace(/\\/g, "/").replace(/^\.\//, "");
+          map[normalized] = file.content;
+          return map;
+        }, {} as Record<string, string>);
         
         // 各ファイルを分析
         const analyzedFiles = extractedFiles.map(file => {
           const language = detectLanguage(file.path);
           const technologies = detectTechnologies(file.content, language);
+          
+          // 依存関係を抽出・解決
+          const dependencies = extractDependencies(file.content);
+          const resolvedDependencies = dependencies
+            .map(dep => resolveImport(file.path, dep, fileMap))
+            .filter((dep): dep is string => dep !== null);
           
           return {
             fileName: file.path,
@@ -258,7 +272,9 @@ function App() {
               classes: extractClasses(file.content),
               imports: extractImports(file.content),
               exports: extractExports(file.content)
-            }
+            },
+            dependencies,
+            resolvedDependencies
           };
         });
         
@@ -553,18 +569,6 @@ function App() {
                       <span className="item-label">型安全性</span>
                       <span className="item-score">+{analysisResult.blackboxRisk.breakdown.typeSafety}</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {analysisResult.type === 'single' ? (
-              <div className="summary-result">
-                <div className="summary-stats">
-                  <h3>プロジェクト概要</h3>
-                  <div className="stats-grid">
-                    <div className="stat-item">
-                      <span className="stat-label">言語</span>
                       <span className="stat-value">{analysisResult.language}</span>
                     </div>
                     <div className="stat-item">
@@ -613,9 +617,10 @@ function App() {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="summary-result">
-                <div className="summary-stats">
+            )}
+            
+            {analysisResult.type === 'zip' && (
+              <div className="summary-stats">
                   <h3>プロジェクト概要</h3>
                   <div className="stats-grid">
                     <div className="stat-item">
