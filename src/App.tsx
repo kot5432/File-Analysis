@@ -2221,6 +2221,330 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
   );
 };
 
+// --- プロジェクト健全性スコア型定義 ---
+interface ProjectHealthScore {
+  score: number;
+  level: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL';
+  breakdown: {
+    avgRiskScore: number;
+    highRiskFileRatio: number;
+    avgNestingDepth: number;
+    avgCommentRatio: number;
+    avgAiLikelihood: number;
+  };
+  recommendations: string[];
+}
+
+// --- 健全性レベル分類 ---
+const getHealthLevel = (score: number): { level: string; color: string; icon: string } => {
+  if (score >= 80) return { level: 'EXCELLENT', color: '#52c41a', icon: '🟢' };
+  if (score >= 65) return { level: 'GOOD', color: '#a0d911', icon: '🟡' };
+  if (score >= 45) return { level: 'WARNING', color: '#faad14', icon: '🟠' };
+  return { level: 'CRITICAL', color: '#ff4d4f', icon: '🔴' };
+};
+
+// --- 指標レベル分類 ---
+const getMetricLevel = (value: number, type: 'risk' | 'comment' | 'ai'): { level: string; color: string } => {
+  if (type === 'risk') {
+    if (value >= 70) return { level: 'HIGH', color: '#ff4d4f' };
+    if (value >= 40) return { level: 'MEDIUM', color: '#faad14' };
+    return { level: 'LOW', color: '#52c41a' };
+  } else if (type === 'comment') {
+    if (value >= 20) return { level: 'GOOD', color: '#52c41a' };
+    if (value >= 10) return { level: 'FAIR', color: '#faad14' };
+    return { level: 'POOR', color: '#ff4d4f' };
+  } else { // ai
+    if (value >= 70) return { level: 'HIGH', color: '#ff4d4f' };
+    if (value >= 40) return { level: 'MEDIUM', color: '#faad14' };
+    return { level: 'LOW', color: '#52c41a' };
+  }
+};
+
+// --- プロジェクト健全性スコア計算エンジン ---
+const calculateProjectHealthScore = (analysis: AnalysisResult): ProjectHealthScore | null => {
+  if (analysis.type !== 'zip' || !analysis.files || analysis.files.length === 0) {
+    return null;
+  }
+  
+  const files = analysis.files;
+  
+  // Step 6-1: ZIP全体集計
+  const totalRiskScore = files.reduce((sum, file) => sum + calculateFileRiskScore(file), 0);
+  const avgRiskScore = totalRiskScore / files.length;
+  
+  const highRiskFiles = files.filter(file => {
+    const score = calculateFileRiskScore(file);
+    return score >= 67; // HIGHリスク基準
+  });
+  const highRiskFileRatio = highRiskFiles.length / files.length;
+  
+  const nestingDepths = files
+    .map(file => file.blackboxRisk?.breakdown?.nestingDepth || 0)
+    .filter(depth => depth > 0);
+  const avgNestingDepth = nestingDepths.length > 0 
+    ? nestingDepths.reduce((sum, depth) => sum + depth, 0) / nestingDepths.length 
+    : 0;
+  
+  const commentRatios = files
+    .map(file => file.blackboxRisk?.breakdown?.commentRate || 0)
+    .filter(ratio => ratio >= 0);
+  const avgCommentRatio = commentRatios.length > 0
+    ? commentRatios.reduce((sum, ratio) => sum + ratio, 0) / commentRatios.length
+    : 0;
+  
+  const aiLikelihoods = files
+    .map(file => file.blackboxRisk?.aiEstimation?.aiLikelihood || 0)
+    .filter(likelihood => likelihood >= 0);
+  const avgAiLikelihood = aiLikelihoods.length > 0
+    ? aiLikelihoods.reduce((sum, likelihood) => sum + likelihood, 0) / aiLikelihoods.length
+    : 0;
+  
+  // Step 6-2: 正規化（重要）
+  // リスクスコア（そのまま、高いほど悪い）
+  const riskNorm = avgRiskScore;
+  
+  // ハイリスクファイル率（そのまま、高いほど悪い）
+  const highRiskNorm = highRiskFileRatio * 100;
+  
+  // ネスト深度（8を上限として正規化、高いほど悪い）
+  const nestNorm = Math.min((avgNestingDepth / 8) * 100, 100);
+  
+  // コメント率（逆指標、低いほど悪い）
+  const commentNorm = 100 - (avgCommentRatio * 100);
+  
+  // AI生成確率（そのまま、高いほど悪い）
+  const aiNorm = avgAiLikelihood;
+  
+  // Step 6-3: 重み付き合算
+  const healthScore = Math.max(0, Math.min(100,
+    100 - (
+      riskNorm * 0.35 +           // 平均リスクスコア（35%）
+      highRiskNorm * 0.25 +       // ハイリスクファイル率（25%）
+      nestNorm * 0.15 +           // 平均ネスト深度（15%）
+      commentNorm * 0.15 +        // コメント率（15%）
+      aiNorm * 0.10               // AI生成平均確率（10%）
+    )
+  ));
+  
+  // レベル判定
+  const { level, color, icon } = getHealthLevel(healthScore);
+  
+  // 推奨事項生成
+  const recommendations: string[] = [];
+  if (avgRiskScore >= 50) {
+    recommendations.push('全体的なリスクスコアが高いため、優先的に改善が必要です');
+  }
+  if (highRiskFileRatio >= 0.2) {
+    recommendations.push(`ハイリスクファイルが${Math.round(highRiskFileRatio * 100)}%あります。これらのファイルから改善を始めましょう`);
+  }
+  if (avgNestingDepth >= 4) {
+    recommendations.push('ネストが深いファイルが多いです。関数分割や早期returnを検討してください');
+  }
+  if (avgCommentRatio < 0.15) {
+    recommendations.push('コメント率が低いです。ドキュメンテーションの改善を検討してください');
+  }
+  if (avgAiLikelihood >= 50) {
+    recommendations.push('AI生成コードの割合が高いです。人間によるレビューを強化してください');
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('プロジェクトの健全性は良好です。現在の品質を維持してください');
+  }
+  
+  return {
+    score: Math.round(healthScore),
+    level: level as 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL',
+    breakdown: {
+      avgRiskScore: Math.round(avgRiskScore),
+      highRiskFileRatio: Math.round(highRiskFileRatio * 100),
+      avgNestingDepth: Math.round(avgNestingDepth * 10) / 10,
+      avgCommentRatio: Math.round(avgCommentRatio * 100),
+      avgAiLikelihood: Math.round(avgAiLikelihood)
+    },
+    recommendations
+  };
+};
+
+// --- 改善インパクト予測（神機能）---
+const calculateImprovementImpact = (health: ProjectHealthScore, fileRisks: FileRiskWithFixes[]): { current: number; improved: number; gain: number } => {
+  if (!fileRisks || fileRisks.length === 0) {
+    return { current: health.score, improved: health.score, gain: 0 };
+  }
+  
+  // TOP3ファイルの改善によるインパクトを計算
+  const top3Files = fileRisks.slice(0, 3);
+  const totalFiles = fileRisks.length;
+  
+  // 簡易的なインパクト計算
+  // TOP3ファイルのリスクを平均的に50%改善すると仮定
+  const currentAvgRisk = health.breakdown.avgRiskScore;
+  const top3AvgRisk = top3Files.reduce((sum, file) => sum + file.riskScore, 0) / top3Files.length;
+  const otherAvgRisk = (currentAvgRisk * totalFiles - top3AvgRisk * 3) / (totalFiles - 3);
+  
+  const improvedAvgRisk = (top3AvgRisk * 0.5 * 3 + otherAvgRisk * (totalFiles - 3)) / totalFiles;
+  const riskImprovement = currentAvgRisk - improvedAvgRisk;
+  
+  // リスク改善分をスコアに反映
+  const scoreGain = Math.round(riskImprovement * 0.35); // リスク重み35%
+  const improvedScore = Math.min(100, health.score + scoreGain);
+  
+  return {
+    current: health.score,
+    improved: improvedScore,
+    gain: scoreGain
+  };
+};
+
+// --- プロジェクト健全性表示コンポーネント ---
+const ProjectHealthScoreView: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const health = calculateProjectHealthScore(analysis);
+  const fileRisks = generateFileRisksWithFixes(analysis);
+  const impact = health ? calculateImprovementImpact(health, fileRisks) : null;
+  
+  if (!health) {
+    return null;
+  }
+  
+  const { level, color, icon } = getHealthLevel(health.score);
+  
+  // Breakdownのメトリックレベル
+  const riskLevel = getMetricLevel(health.breakdown.avgRiskScore, 'risk');
+  const commentLevel = getMetricLevel(health.breakdown.avgCommentRatio, 'comment');
+  const aiLevel = getMetricLevel(health.breakdown.avgAiLikelihood, 'ai');
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: `2px solid ${color}`,
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      {/* メインスコア表示 */}
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+          🏥 Project Health Score
+        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          <div style={{
+            fontSize: '48px',
+            fontWeight: 'bold',
+            color: color
+          }}>
+            {health.score}
+          </div>
+          <div style={{ fontSize: '24px', color: '#666' }}>/ 100</div>
+          <div style={{
+            backgroundColor: color,
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            {icon} {level}
+          </div>
+        </div>
+      </div>
+      
+      {/* Breakdownパネル */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
+          📊 Health Breakdown
+        </h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Avg Risk:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: riskLevel.color }}>
+              {riskLevel.level} ({health.breakdown.avgRiskScore})
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>High Risk Files:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ff4d4f' }}>
+              {health.breakdown.highRiskFileRatio}%
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Complexity:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: health.breakdown.avgNestingDepth >= 4 ? '#ff4d4f' : '#52c41a' }}>
+              {health.breakdown.avgNestingDepth >= 4 ? 'HIGH' : 'MEDIUM'} ({health.breakdown.avgNestingDepth})
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Documentation:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: commentLevel.color }}>
+              {commentLevel.level} ({health.breakdown.avgCommentRatio}%)
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>AI Dependency:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: aiLevel.color }}>
+              {aiLevel.level} ({health.breakdown.avgAiLikelihood}%)
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {/* 改善インパクト予測 */}
+      {impact && impact.gain > 0 && (
+        <div style={{
+          backgroundColor: '#e6f7ff',
+          border: '1px solid #91d5ff',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '20px'
+        }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#0958d9' }}>
+            ⭐ 改善インパクト予測
+          </h4>
+          <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>
+            If top 3 issues fixed:
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '16px', color: '#666' }}>
+              Health Score: {impact.current} → 
+            </span>
+            <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#0958d9' }}>
+              {impact.improved}
+            </span>
+            <span style={{ fontSize: '16px', color: '#52c41a', fontWeight: 'bold' }}>
+              (+{impact.gain})
+            </span>
+          </div>
+        </div>
+      )}
+      
+      {/* 推奨事項 */}
+      <div style={{
+        backgroundColor: '#fffbe6',
+        border: '1px solid #ffe58f',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#d46b08' }}>
+          💡 推奨事項
+        </h4>
+        <ul style={{ margin: 0, paddingLeft: '20px' }}>
+          {health.recommendations.map((rec, index) => (
+            <li key={index} style={{ fontSize: '13px', color: '#666', marginBottom: '4px', lineHeight: '1.4' }}>
+              {rec}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -3105,6 +3429,9 @@ function App() {
 
         {analysisResult && (
           <div className="analysis-result">
+            {/* プロジェクト健全性スコア */}
+            <ProjectHealthScoreView analysis={analysisResult} />
+
             {/* プロジェクト要約ビュー */}
             <ProjectSummaryView 
               result={analysisResult} 
