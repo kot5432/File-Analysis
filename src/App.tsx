@@ -1610,6 +1610,373 @@ const ImprovementSuggestions: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
+// --- ファイルリスク型定義 ---
+interface FileRisk {
+  path: string;
+  language: string;
+  lines: number;
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  issues: string[];
+}
+
+// --- ファイルリスク計算エンジン ---
+const calculateFileRiskScore = (file: FileAnalysis): number => {
+  let score = 0;
+  const issues: string[] = [];
+  
+  // ネスト深度リスク
+  if (file.blackboxRisk?.breakdown?.nestingDepth) {
+    const nesting = file.blackboxRisk.breakdown.nestingDepth;
+    if (nesting >= 6) {
+      score += 30;
+      issues.push('Deep nesting');
+    } else if (nesting >= 4) {
+      score += 15;
+      issues.push('Moderate nesting');
+    }
+  }
+  
+  // コメント不足リスク
+  if (file.blackboxRisk?.breakdown?.commentRate !== undefined) {
+    const commentRate = file.blackboxRisk.breakdown.commentRate;
+    if (commentRate < 0.1) {
+      score += 25;
+      issues.push('Low comments');
+    } else if (commentRate < 0.2) {
+      score += 10;
+      issues.push('Few comments');
+    }
+  }
+  
+  // ファイル肥大リスク
+  if (file.lines > 600) {
+    score += 20;
+    issues.push('Large file');
+  } else if (file.lines > 300) {
+    score += 10;
+    issues.push('Moderate size');
+  }
+  
+  // 未使用関数リスク
+  if (file.structure.functions && file.structure.functions.length > 5) {
+    const unusedCount = Math.max(0, file.structure.functions.length - 5);
+    if (unusedCount >= 3) {
+      score += 15;
+      issues.push('Unused functions');
+    } else if (unusedCount >= 1) {
+      score += 5;
+      issues.push('Some unused functions');
+    }
+  }
+  
+  // AI生成推定補正
+  if (file.blackboxRisk?.aiEstimation?.aiLikelihood) {
+    const aiLikelihood = file.blackboxRisk.aiEstimation.aiLikelihood;
+    if (aiLikelihood >= 70) {
+      score += 10;
+      issues.push('AI generated likely');
+    } else if (aiLikelihood >= 40) {
+      score += 5;
+      issues.push('AI generated possible');
+    }
+  }
+  
+  // 0-100に正規化
+  return Math.min(score, 100);
+};
+
+// --- リスクレベル分類 ---
+const getRiskLevel = (score: number): 'low' | 'medium' | 'high' => {
+  if (score >= 67) return 'high';
+  if (score >= 34) return 'medium';
+  return 'low';
+};
+
+// --- ファイルリスクデータ生成 ---
+const generateFileRisks = (analysis: AnalysisResult): FileRisk[] => {
+  if (analysis.type !== 'zip' || !analysis.files) {
+    return [];
+  }
+  
+  return analysis.files.map(file => {
+    const riskScore = calculateFileRiskScore(file);
+    const riskLevel = getRiskLevel(riskScore);
+    
+    // issuesを生成
+    const issues: string[] = [];
+    if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 6) {
+      issues.push('Deep nesting');
+    }
+    if (file.blackboxRisk?.breakdown?.commentRate !== undefined && file.blackboxRisk.breakdown.commentRate < 0.1) {
+      issues.push('Low comments');
+    }
+    if (file.lines > 600) {
+      issues.push('Large file');
+    }
+    if (file.structure.functions && file.structure.functions.length > 5) {
+      issues.push('Many functions');
+    }
+    if (file.blackboxRisk?.aiEstimation?.aiLikelihood && file.blackboxRisk.aiEstimation.aiLikelihood >= 70) {
+      issues.push('AI generated likely');
+    }
+    
+    return {
+      path: file.fileName,
+      language: file.language,
+      lines: file.lines,
+      riskScore,
+      riskLevel,
+      issues
+    };
+  }).sort((a, b) => b.riskScore - a.riskScore); // riskScore降順ソート
+};
+
+// --- ヒートマップ表示コンポーネント ---
+const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const fileRisks = generateFileRisks(analysis);
+  
+  if (fileRisks.length === 0) {
+    return null;
+  }
+  
+  // 最初に直すべき3ファイルを抽出
+  const top3Files = fileRisks.slice(0, 3);
+  
+  // リスクレベルの色とアイコン
+  const riskConfig = {
+    high: { color: '#ff4d4f', bgColor: '#fff2f0', icon: '🔴' },
+    medium: { color: '#faad14', bgColor: '#fffbe6', icon: '🟠' },
+    low: { color: '#52c41a', bgColor: '#f6ffed', icon: '🟢' }
+  };
+  
+  // ファイルサイズに基づくカードサイズ（最小80px、最大200px）
+  const getCardSize = (lines: number) => {
+    const minSize = 80;
+    const maxSize = 200;
+    const maxLines = 1000;
+    const size = minSize + (lines / maxLines) * (maxSize - minSize);
+    return Math.min(Math.max(size, minSize), maxSize);
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        🗺️ リスクヒートマップ
+      </h3>
+      
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 プロジェクトの危険分布を可視化。赤いファイルから優先的に改善しましょう。
+      </div>
+      
+      {/* 最初に直すべき3ファイル */}
+      <div style={{ marginBottom: '24px' }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          🎯 最初に直すべき3ファイル
+        </h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {top3Files.map((file, index) => {
+            const config = riskConfig[file.riskLevel];
+            return (
+              <div 
+                key={file.path}
+                style={{
+                  backgroundColor: config.bgColor,
+                  border: `1px solid ${config.color}`,
+                  borderRadius: '6px',
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+              >
+                <div style={{
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: config.color
+                }}>
+                  {config.icon} TOP {index + 1}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '2px' }}>
+                    {file.path}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    Risk: {file.riskScore} • {file.lines} lines • {file.language}
+                  </div>
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  {file.issues.join(' • ')}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* ヒートマップグリッド */}
+      <div>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          📁 ファイルリスク分布
+        </h4>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+          gap: '8px',
+          maxHeight: '400px',
+          overflowY: 'auto'
+        }}>
+          {fileRisks.map((file) => {
+            const config = riskConfig[file.riskLevel];
+            const cardSize = getCardSize(file.lines);
+            
+            return (
+              <div
+                key={file.path}
+                style={{
+                  backgroundColor: config.bgColor,
+                  border: `2px solid ${config.color}`,
+                  borderRadius: '8px',
+                  padding: '8px',
+                  height: `${cardSize}px`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  position: 'relative',
+                  minWidth: '80px',
+                  maxWidth: '200px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  e.currentTarget.style.zIndex = '10';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.zIndex = '1';
+                }}
+                title={`${file.path}\nRisk: ${file.riskScore}\nLines: ${file.lines}\nIssues: ${file.issues.join(', ')}`}
+              >
+                <div style={{
+                  fontSize: '20px',
+                  marginBottom: '4px',
+                  lineHeight: '1'
+                }}>
+                  {config.icon}
+                </div>
+                <div style={{
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  color: config.color,
+                  marginBottom: '2px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '100%',
+                  padding: '0 2px'
+                }}>
+                  {file.path.split('/').pop()}
+                </div>
+                <div style={{
+                  fontSize: '10px',
+                  color: '#666',
+                  marginBottom: '2px'
+                }}>
+                  Risk: {file.riskScore}
+                </div>
+                <div style={{
+                  fontSize: '9px',
+                  color: '#888'
+                }}>
+                  {file.lines} lines
+                </div>
+                
+                {/* ホバー時の詳細情報 */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  backgroundColor: 'white',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  zIndex: '100',
+                  opacity: '0',
+                  pointerEvents: 'none',
+                  transition: 'opacity 0.2s',
+                  width: '200px',
+                  marginBottom: '4px'
+                }}
+                className="heatmap-tooltip"
+              >
+                <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '4px' }}>
+                  {file.path}
+                </div>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
+                  Risk: {file.riskScore} ({file.riskLevel.toUpperCase()})
+                </div>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
+                  Language: {file.language}
+                </div>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+                  Lines: {file.lines}
+                </div>
+                {file.issues.length > 0 && (
+                  <div style={{ fontSize: '10px', color: '#666' }}>
+                    Issues: {file.issues.join(', ')}
+                  </div>
+                )}
+              </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* 凡例 */}
+      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+        {Object.entries(riskConfig).map(([level, config]) => (
+          <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '2px',
+              backgroundColor: config.color
+            }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              {level.toUpperCase()} ({level === 'high' ? '67-100' : level === 'medium' ? '34-66' : '0-33'})
+            </span>
+          </div>
+        ))}
+      </div>
+      
+      {/* ツールチップ用スタイル */}
+      <style>{`
+        .heatmap-tooltip {
+          opacity: 0;
+          pointer-events: none;
+        }
+        div:hover .heatmap-tooltip {
+          opacity: 1;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -2514,6 +2881,9 @@ function App() {
 
             {/* 改善提案 */}
             <ImprovementSuggestions analysis={analysisResult} />
+
+            {/* リスクヒートマップ */}
+            <RiskHeatmap analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
