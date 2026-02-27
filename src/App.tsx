@@ -947,45 +947,65 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
 const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: AnalysisResult }> = ({ files, singleFile }) => {
   const calculateImportanceScore = (file: FileAnalysis): number => {
     let score = 0;
-    
-    // 🥇 ① エントリーポイントボーナス（最重要）
     const fileName = file.fileName.toLowerCase();
     
+    // 🥇 ① エントリーポイント検出（最大 +40）
     if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      score += 50; // 最大ボーナス
+      score += 40; // 明確なエントリ検出
+    } else if (fileName.includes('router') || fileName.includes('routes') || fileName.includes('server')) {
+      score += 25; // 準エントリ
     }
     
-    // 🥈 ② import集中度（大）
-    // 他ファイルからどれだけ参照されているかを推定
-    // 実際にはクロスファイル解析が必要だが、ここではエクスポート数で代替
-    score += Math.min(file.structure.exports.length * 10, 30);
-    
-    // 🥉 ③ ファイルサイズ（中）
-    // 大きすぎはノイズになるので上限を設定
-    score += Math.min(file.lines / 50, 20);
-    
-    // ④ 技術シグナル（中）
-    // ファイル名や構造から技術的中核を推定
-    if (fileName.includes('router') || fileName.includes('routes')) {
-      score += 15;
-    }
-    if (fileName.includes('controller') || fileName.includes('controllers')) {
-      score += 15;
-    }
-    if (fileName.includes('service') || fileName.includes('services')) {
-      score += 10;
-    }
-    if (fileName.includes('config') || fileName.includes('configuration')) {
-      score += 10;
+    // 🥈 ② import集中度（最大 +25）
+    // エクスポート数をimport集中度の代理として使用
+    const exportCount = file.structure.exports.length;
+    if (exportCount >= 10) {
+      score += 25; // import最多
+    } else if (exportCount >= 5) {
+      score += 15; // 中程度
+    } else if (exportCount >= 2) {
+      score += 5; // 低
     }
     
-    // ⑤ ブラックボックスリスク（補助）
-    // 危険ファイルを早期に発見
-    if (file.blackboxRisk && file.blackboxRisk.score > 60) {
-      score += 5;
+    // 🥉 ③ ファイルサイズ（最大 +15）
+    // 「適度に大きい」を評価するカーブ
+    const lines = file.lines;
+    if (lines >= 300 && lines <= 800) {
+      score += 15; // 最適サイズ
+    } else if (lines >= 100 && lines < 300) {
+      score += 10; // 小さいけど重要かも
+    } else if (lines > 800 && lines <= 1500) {
+      score += 8; // 大きいけど中核かも
+    } else if (lines > 1500) {
+      score += 3; // 巨大ファイル（減衰）
+    }
+    // 100行未満は加点なし
+    
+    // ④ 技術中枢シグナル（最大 +15）
+    if (fileName.includes('component') || fileName.includes('components')) {
+      score += 10; // React component
+    } else if (fileName.includes('router') || fileName.includes('routes')) {
+      score += 12; // Express router
+    } else if (fileName.includes('controller') || fileName.includes('controllers')) {
+      score += 12; // Controller層
+    } else if (fileName.includes('service') || fileName.includes('services')) {
+      score += 8; // Service層
+    } else if (fileName.includes('view') || fileName.includes('views')) {
+      score += 12; // Django view
+    } else if (fileName.includes('config') || fileName.includes('configuration')) {
+      score += 5; // 設定ファイル
+    } else if (fileName.includes('util') || fileName.includes('utils') || fileName.includes('helper')) {
+      score += 2; // ユーティリティ（低評価）
     }
     
-    return score;
+    // ⑤ ブラックボックスリスク（最大 +5）
+    if (file.blackboxRisk && file.blackboxRisk.score > 70) {
+      score += 5; // 高リスク
+    } else if (file.blackboxRisk && file.blackboxRisk.score > 40) {
+      score += 2; // 中リスク
+    }
+    
+    return Math.min(score, 100); // 上限100点
   };
 
   const getReasonTags = (file: FileAnalysis, score: number): string[] => {
@@ -994,44 +1014,44 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
     
     // エントリーポイント判定
     if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      tags.push('🏷 Entry Point');
+      tags.push('Entry Point');
+    } else if (fileName.includes('router') || fileName.includes('routes') || fileName.includes('server')) {
+      tags.push('Core Module');
     }
     
     // import集中度判定
-    if (file.structure.exports.length > 5) {
-      tags.push('🏷 Highly Exported');
+    if (file.structure.exports.length >= 10) {
+      tags.push('Highly Imported');
     }
     
     // ファイルサイズ判定
-    if (file.lines > 500) {
-      tags.push('🏷 Large File');
+    const lines = file.lines;
+    if (lines >= 300 && lines <= 800) {
+      tags.push('Optimal Size');
+    } else if (lines > 1500) {
+      tags.push('Large File');
     }
     
     // 技術的中核判定
-    if (fileName.includes('router') || fileName.includes('routes')) {
-      tags.push('🏷 Router Core');
-    }
-    if (fileName.includes('controller') || fileName.includes('controllers')) {
-      tags.push('🏷 Controller');
-    }
-    if (fileName.includes('service') || fileName.includes('services')) {
-      tags.push('🏷 Service Layer');
-    }
-    if (fileName.includes('config') || fileName.includes('configuration')) {
-      tags.push('🏷 Configuration');
+    if (fileName.includes('component') || fileName.includes('components')) {
+      tags.push('Component');
+    } else if (fileName.includes('router') || fileName.includes('routes')) {
+      tags.push('Router Core');
+    } else if (fileName.includes('controller') || fileName.includes('controllers')) {
+      tags.push('Controller');
+    } else if (fileName.includes('service') || fileName.includes('services')) {
+      tags.push('Service Layer');
+    } else if (fileName.includes('config') || fileName.includes('configuration')) {
+      tags.push('Configuration');
     }
     
     // リスク判定
-    if (file.blackboxRisk && file.blackboxRisk.score > 60) {
-      tags.push('🏷 High Risk');
+    if (file.blackboxRisk && file.blackboxRisk.score > 70) {
+      tags.push('High Risk');
     }
     
-    // デフォルトタグ
-    if (tags.length === 0) {
-      tags.push('🏷 Standard File');
-    }
-    
-    return tags;
+    // 最大2-3タグに制限
+    return tags.slice(0, 3);
   };
 
   const getReadingOrder = () => {
@@ -1047,7 +1067,7 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
           blackboxRisk: singleFile.blackboxRisk
         },
         score: 100,
-        reasons: ['🏷 Only File']
+        reasons: ['Single File']
       }];
     }
     
@@ -1059,7 +1079,7 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
       reasons: getReasonTags(file, calculateImportanceScore(file))
     }));
     
-    return scoredFiles.sort((a, b) => b.score - a.score).slice(0, 5);
+    return scoredFiles.sort((a, b) => b.score - a.score).slice(0, 3); // Top 3に制限
   };
 
   const readingOrder = getReadingOrder();
@@ -1169,7 +1189,7 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
                 overflow: 'hidden'
               }}>
                 <div style={{
-                  width: `${Math.min(item.score, 100)}%`,
+                  width: `${item.score}%`,
                   height: '100%',
                   backgroundColor: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e',
                   borderRadius: '2px'
@@ -1193,12 +1213,12 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
         <strong>💡 読解のヒント:</strong> 
         {readingOrder[0].reasons.some(r => r.includes('Entry Point')) 
           ? ' まずエントリーポイントから読むことで、プロジェクト全体の構造が理解しやすくなります。'
-          : readingOrder[0].reasons.some(r => r.includes('Router') || r.includes('Controller'))
-          ? ' 最初のファイルはプロジェクトの核となるルーティングやコントローラーです。ここから理解を始めるのが効率的です。'
+          : readingOrder[0].reasons.some(r => r.includes('Core') || r.includes('Router') || r.includes('Controller'))
+          ? ' 最初のファイルはプロジェクトの核となるモジュールです。ここから理解を始めるのが効率的です。'
           : ' 最初のファイルはプロジェクトの重要な要素です。ここから理解を始めることで、全体像が掴みやすくなります。'
         }
         <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-          📊 重要度スコアはエントリーポイント、依存関係、ファイルサイズ、技術的中核性を総合的に評価しています。
+          📊 重要度スコア: エントリーポイント(40点) + import集中度(25点) + ファイルサイズ(15点) + 技術シグナル(15点) + リスク(5点) = 最大100点
         </div>
       </div>
     </div>
