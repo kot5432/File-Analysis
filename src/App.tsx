@@ -3689,34 +3689,121 @@ const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) =>
 
 // --- Main App Component ---
 
-const FileDetailView: React.FC<{ file: FileAnalysis; onBack: () => void }> = ({ file, onBack }) => (
-  <div className="file-detail-view" style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-    <button onClick={onBack} style={{ marginBottom: '16px', background: 'none', border: 'none', color: '#4a90e2', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center' }}>
-      ← 一覧に戻る
-    </button>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{file.fileName}</h2>
-        <div style={{ marginTop: '8px', color: '#666' }}>
-          <span>{file.language}</span> • <span>{formatFileSize(file.size)}</span> • <span>{file.lines}行</span>
+const FileDetailView: React.FC<{ file: FileAnalysis; onBack: () => void }> = ({ file, onBack }) => {
+  const [fileContent, setFileContent] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [contentError, setContentError] = useState<string>('');
+
+  const loadFileContent = async () => {
+    setIsLoading(true);
+    setContentError('');
+    try {
+      // ZIPファイルから特定のファイル内容を取得するロジック
+      // ここではファイル名から内容を取得する仮想的な実装
+      // 実際の実装ではZIPファイルから該当ファイルを抽出する必要があります
+      const content = `// ${file.fileName} の内容
+// これはサンプルコンテンツです
+// 実際のファイル内容はZIPから抽出する必要があります
+
+// ファイル情報:
+// - 言語: ${file.language}
+// - サイズ: ${file.size} bytes
+// - 行数: ${file.lines}行
+// - 技術スタック: ${file.technologies.join(', ')}
+
+// リスク分析結果:
+// - ブラックボックスリスク: ${file.blackboxRisk?.score || 0}点
+// - リスクレベル: ${file.blackboxRisk?.level || 'UNKNOWN'}
+
+// 構造情報:
+// - 関数数: ${file.structure.functions.length}
+// - クラス数: ${file.structure.classes.length}
+// - インポート数: ${file.structure.imports.length}
+// - エクスポート数: ${file.structure.exports.length}
+
+// 以下に実際のファイル内容が表示されます...
+`;
+      setFileContent(content);
+    } catch (error) {
+      setContentError('ファイル内容の読み込みに失敗しました');
+      console.error('File content loading error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // コンポーネントマウント時にファイル内容を読み込み
+  React.useEffect(() => {
+    loadFileContent();
+  }, [file]);
+
+  return (
+    <div className="file-detail-view" style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+      <button onClick={onBack} style={{ marginBottom: '16px', background: 'none', border: 'none', color: '#4a90e2', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center' }}>
+        ← 一覧に戻る
+      </button>
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{file.fileName}</h2>
+          <div style={{ marginTop: '8px', color: '#666' }}>
+            <span>{file.language}</span> • <span>{formatFileSize(file.size)}</span> • <span>{file.lines}行</span>
+          </div>
+        </div>
+        <RiskBadge risk={file.blackboxRisk} />
+      </div>
+
+      {/* ファイル内容セクション */}
+      <div style={{ marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem', color: '#333' }}>📄 ファイル内容</h3>
+        
+        {isLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+            <div>ファイル内容を読み込み中...</div>
+          </div>
+        ) : contentError ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#e74c3c' }}>
+            <div>{contentError}</div>
+          </div>
+        ) : (
+          <div style={{
+            backgroundColor: '#f8f9fa',
+            border: '1px solid #e9ecef',
+            borderRadius: '8px',
+            padding: '16px',
+            fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            maxHeight: '500px',
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {fileContent}
+          </div>
+        )}
+      </div>
+
+      {/* 分析結果セクション */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        <div>
+          {file.blackboxRisk && <RiskAnalysisView risk={file.blackboxRisk} />}
+        </div>
+        <div>
+          <StructureStats structure={file.structure} />
         </div>
       </div>
-      <RiskBadge risk={file.blackboxRisk} />
+
+      {file.technologies.length > 0 && (
+        <div className="technologies-summary" style={{ marginTop: '24px' }}>
+          <h3>検出された技術</h3>
+          <div className="tech-tags">
+            {file.technologies.map((t, i) => <span key={i} className="tech-tag">{t}</span>)}
+          </div>
+        </div>
+      )}
     </div>
-
-    {file.blackboxRisk && <RiskAnalysisView risk={file.blackboxRisk} />}
-    <StructureStats structure={file.structure} />
-
-    {file.technologies.length > 0 && (
-      <div className="technologies-summary" style={{ marginTop: '24px' }}>
-        <h3>検出された技術</h3>
-        <div className="tech-tags">
-          {file.technologies.map((t, i) => <span key={i} className="tech-tag">{t}</span>)}
-        </div>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -3932,20 +4019,10 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
   
   const impactColor = impactColors[nextAction.impact];
   
-  // View Details クリックハンドラ
+  // View Details クリックハンドラ（表示のみ）
   const handleViewDetails = () => {
-    if (nextAction.targetElement) {
-      // 対象ファイルの詳細へスクロール
-      const fileElement = document.querySelector(`[data-file-path="${nextAction.targetElement}"]`);
-      if (fileElement) {
-        fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // ハイライト効果
-        (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
-        setTimeout(() => {
-          (fileElement as HTMLElement).style.backgroundColor = '';
-        }, 2000);
-      }
-    }
+    // トラッキング機能を無効化 - 表示のみに変更
+    console.log('Next Best Actionの詳細を表示（トラッキング無効）');
   };
   
   return (
@@ -4043,7 +4120,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
           <button
             onClick={handleViewDetails}
             style={{
-              backgroundColor: '#0ea5e9',
+              backgroundColor: '#ef4444',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
@@ -4054,8 +4131,8 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
               transition: 'background-color 0.2s',
               whiteSpace: 'nowrap'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0284c7'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0ea5e9'}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
           >
             📍 ファイルを確認
           </button>
