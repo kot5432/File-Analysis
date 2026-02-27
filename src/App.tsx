@@ -422,7 +422,340 @@ const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ co
   );
 };
 
-// --- 実行フロー分析コンポーネント ---
+// --- プロジェクト要約ビューコンポーネント ---
+const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }> = ({ result, fileName }) => {
+  const getProjectType = () => {
+    if (result.type === 'zip') {
+      const languages = Object.keys(result.summary?.languages || {});
+      if (languages.includes('JavaScript') || languages.includes('TypeScript')) {
+        return 'Webアプリケーション';
+      } else if (languages.includes('Python')) {
+        return 'Pythonアプリケーション';
+      } else if (languages.includes('Java')) {
+        return 'Javaアプリケーション';
+      }
+      return 'マルチ言語プロジェクト';
+    }
+    return '単一ファイル';
+  };
+
+  const getSafetyLevel = () => {
+    const riskScore = result.blackboxRisk?.score || 0;
+    if (riskScore >= 70) return { level: '⚠️ 高リスク', color: '#ff4d4f', description: '要注意' };
+    if (riskScore >= 40) return { level: '🟡 中リスク', color: '#faad14', description: '注意' };
+    return { level: '✅ 低リスク', color: '#52c41a', description: '安全' };
+  };
+
+  const getAIGeneration = () => {
+    const aiLikelihood = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
+    if (aiLikelihood >= 70) return { level: '🤖 AI生成確率高', color: '#ff4d4f', description: 'AI生成の可能性が高い' };
+    if (aiLikelihood >= 40) return { level: '🤔 AI生成の可能性', color: '#faad14', description: 'AI生成の可能性あり' };
+    return { level: '👤 人間が書いた', color: '#52c41a', description: '人間が書いた可能性が高い' };
+  };
+
+  const getMainTech = () => {
+    if (result.type === 'zip') {
+      const techs = Object.entries(result.summary?.technologies || {})
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3)
+        .map(([tech]) => tech);
+      return techs.length > 0 ? techs.join(', ') : '不明';
+    }
+    return result.technologies?.slice(0, 3).join(', ') || '不明';
+  };
+
+  const safety = getSafetyLevel();
+  const aiGen = getAIGeneration();
+  const projectType = getProjectType();
+  const mainTech = getMainTech();
+
+  return (
+    <div className="project-summary" style={{
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      color: 'white',
+      padding: '24px',
+      borderRadius: '12px',
+      marginBottom: '24px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+        <div>
+          <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 'bold' }}>
+            📁 {fileName}
+          </h2>
+          <p style={{ margin: 0, fontSize: '16px', opacity: 0.9 }}>
+            {projectType} • {result.type === 'zip' ? `${result.totalFiles}ファイル` : '単一ファイル'}
+          </p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>解析完了</div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>
+            {new Date().toLocaleTimeString('ja-JP')}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div style={{ 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          padding: '16px', 
+          borderRadius: '8px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🛡️ 安全性</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: safety.color }}>
+            {safety.level}
+          </div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>{safety.description}</div>
+        </div>
+
+        <div style={{ 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          padding: '16px', 
+          borderRadius: '8px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🤖 AI生成</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: aiGen.color }}>
+            {aiGen.level}
+          </div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>{aiGen.description}</div>
+        </div>
+
+        <div style={{ 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          padding: '16px', 
+          borderRadius: '8px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🛠️ 主技術</div>
+          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+            {mainTech}
+          </div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>主要技術スタック</div>
+        </div>
+
+        <div style={{ 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          padding: '16px', 
+          borderRadius: '8px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>📊 規模</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+            {result.type === 'zip' ? 
+              `${result.summary?.totalLines || 0}行` : 
+              `${result.lines || 0}行`
+            }
+          </div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>総コード行数</div>
+        </div>
+      </div>
+
+      <div style={{ 
+        marginTop: '16px', 
+        padding: '12px', 
+        backgroundColor: 'rgba(255,255,255,0.1)', 
+        borderRadius: '8px',
+        fontSize: '14px',
+        lineHeight: '1.4'
+      }}>
+        <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTech}を使用した{result.totalFiles || 1}ファイルのプロジェクトです。
+        {safety.level.includes('高') && ' リスクが高いため注意が必要です。'}
+        {aiGen.level.includes('AI') && ' AI生成コードが含まれている可能性があります。'}
+      </div>
+    </div>
+  );
+};
+// --- 読む順番ガイドコンポーネント ---
+const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: AnalysisResult }> = ({ files, singleFile }) => {
+  const calculateImportanceScore = (file: FileAnalysis): number => {
+    let score = 0;
+    
+    // エントリーポイント +30
+    const fileName = file.fileName.toLowerCase();
+    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
+      score += 30;
+    }
+    
+    // ファイルサイズによるスコア (大きいほど重要)
+    score += Math.min(file.lines / 100, 20);
+    
+    // インポート集中度 +15
+    score += Math.min(file.structure.imports.length * 3, 15);
+    
+    // エクスポート数 +10
+    score += Math.min(file.structure.exports.length * 2, 10);
+    
+    // リスクスコア +15 (危険なファイルは優先)
+    score += (file.blackboxRisk?.score || 0) * 0.15;
+    
+    // 関数・クラス数 +10
+    score += Math.min((file.structure.functions.length + file.structure.classes.length) * 2, 10);
+    
+    return score;
+  };
+
+  const getReadingOrder = () => {
+    if (singleFile) {
+      return [{
+        file: {
+          fileName: singleFile.fileName || '',
+          language: singleFile.language || '',
+          technologies: singleFile.technologies || [],
+          size: singleFile.size || 0,
+          lines: singleFile.lines || 0,
+          structure: singleFile.structure || { functions: [], classes: [], imports: [], exports: [] },
+          blackboxRisk: singleFile.blackboxRisk
+        },
+        reason: '唯一のファイル',
+        score: 100
+      }];
+    }
+    
+    if (!files) return [];
+    
+    const scoredFiles = files.map(file => ({
+      file,
+      score: calculateImportanceScore(file),
+      reason: getReason(file)
+    }));
+    
+    return scoredFiles.sort((a, b) => b.score - a.score).slice(0, 5);
+  };
+
+  const getReason = (file: FileAnalysis): string => {
+    const fileName = file.fileName.toLowerCase();
+    const reasons = [];
+    
+    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
+      reasons.push('エントリーポイント');
+    }
+    
+    if (file.structure.imports.length > 5) {
+      reasons.push('多くの依存関係');
+    }
+    
+    if (file.structure.exports.length > 3) {
+      reasons.push('重要なモジュール');
+    }
+    
+    if (file.blackboxRisk?.score && file.blackboxRisk.score > 60) {
+      reasons.push('高リスク');
+    }
+    
+    if (file.lines > 500) {
+      reasons.push('大規模ファイル');
+    }
+    
+    return reasons.length > 0 ? reasons.join('・') : '標準的なファイル';
+  };
+
+  const readingOrder = getReadingOrder();
+
+  if (readingOrder.length === 0) return null;
+
+  return (
+    <div className="reading-order-guide" style={{
+      backgroundColor: '#f8f9fa',
+      padding: '20px',
+      borderRadius: '12px',
+      marginBottom: '24px',
+      border: '2px solid #e3f2fd'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', color: '#1976d2', fontSize: '18px' }}>
+        📖 読む順番ガイド
+      </h3>
+      
+      <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
+        💡 この順番で読むと、プロジェクトの理解が最も速くなります
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {readingOrder.map((item, index) => (
+          <div 
+            key={item.file.fileName}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              padding: '16px',
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              border: '1px solid #e0e0e0',
+              transition: 'all 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: index === 0 ? '#4caf50' : index === 1 ? '#ff9800' : index === 2 ? '#2196f3' : '#9e9e9e',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '14px'
+            }}>
+              {index + 1}
+            </div>
+            
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>
+                📄 {item.file.fileName}
+              </div>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                {item.file.language} • {item.file.lines}行 • {item.file.technologies.slice(0, 3).join(', ')}
+              </div>
+              <div style={{ fontSize: '12px', color: '#888' }}>
+                🎯 {item.reason}
+              </div>
+            </div>
+            
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>重要度</div>
+              <div style={{
+                fontSize: '18px',
+                fontWeight: 'bold',
+                color: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e'
+              }}>
+                {Math.round(item.score)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {readingOrder.length > 0 && (
+        <div style={{
+          marginTop: '16px',
+          padding: '12px',
+          backgroundColor: '#e3f2fd',
+          borderRadius: '8px',
+          fontSize: '14px',
+          color: '#1976d2'
+        }}>
+          <strong>💡 読解のヒント:</strong> 
+          {readingOrder[0].file.fileName.includes('index') || readingOrder[0].file.fileName.includes('main') 
+            ? ' まずエントリーポイントから読むことで、プロジェクト全体の構造が理解しやすくなります。'
+            : ' 最初のファイルはプロジェクトの核となる部分です。ここから理解を始めるのが効率的です。'
+          }
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -736,6 +1069,115 @@ const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = (
         <p style={{ margin: 0, fontSize: '14px' }}>
           {getFlowDescription()}
         </p>
+      </div>
+    </div>
+  );
+};
+
+// --- 比較体験コンポーネント ---
+const ComparisonView: React.FC<{ history: AnalysisHistory[] }> = ({ history }) => {
+  const getRecentComparisons = () => {
+    if (history.length < 2) return [];
+    
+    // 最新2件を比較
+    const latest = history[0];
+    const previous = history[1];
+    
+    return [
+      {
+        type: 'risk',
+        current: latest.riskScore,
+        previous: previous.riskScore,
+        change: latest.riskScore - previous.riskScore,
+        label: 'リスクスコア'
+      },
+      {
+        type: 'ai',
+        current: latest.aiLikelihood,
+        previous: previous.aiLikelihood,
+        change: latest.aiLikelihood - previous.aiLikelihood,
+        label: 'AI生成確率'
+      },
+      {
+        type: 'size',
+        current: latest.fullResult.lines || 0,
+        previous: previous.fullResult.lines || 0,
+        change: (latest.fullResult.lines || 0) - (previous.fullResult.lines || 0),
+        label: 'コード行数'
+      }
+    ];
+  };
+  
+  const comparisons = getRecentComparisons();
+  
+  if (comparisons.length === 0) return null;
+  
+  return (
+    <div className="comparison-view" style={{
+      backgroundColor: '#f0f8ff',
+      padding: '20px',
+      borderRadius: '12px',
+      marginBottom: '24px',
+      border: '2px solid #b3d9ff'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', color: '#0066cc', fontSize: '18px' }}>
+        📊 変化の比較
+      </h3>
+      
+      <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
+        💡 前回の解析からの変化を確認できます
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        {comparisons.map((comp, index) => (
+          <div 
+            key={comp.type}
+            style={{
+              padding: '16px',
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              border: '1px solid #e0e0e0',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+              {comp.label}
+            </div>
+            
+            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>
+              {comp.current}
+              {comp.type === 'ai' && '%'}
+              {comp.type === 'size' && '行'}
+            </div>
+            
+            <div style={{ 
+              fontSize: '14px',
+              fontWeight: 'bold',
+              color: comp.change > 0 ? '#ff4d4f' : comp.change < 0 ? '#52c41a' : '#666'
+            }}>
+              {comp.change > 0 ? '↑' : comp.change < 0 ? '↓' : '→'} {Math.abs(comp.change)}
+              {comp.type === 'ai' && '%'}
+              {comp.type === 'size' && '行'}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <div style={{
+        marginTop: '16px',
+        padding: '12px',
+        backgroundColor: '#e6f3ff',
+        borderRadius: '8px',
+        fontSize: '14px',
+        color: '#0066cc'
+      }}>
+        <strong>💡 変化の解釈:</strong> 
+        {comparisons.find(c => c.type === 'risk')?.change && comparisons.find(c => c.type === 'risk')!.change > 0 
+          ? ' リスクスコアが上昇しています。コードの複雑度が増加した可能性があります。'
+          : comparisons.find(c => c.type === 'risk')?.change && comparisons.find(c => c.type === 'risk')!.change < 0
+          ? ' リスクスコアが改善しています。コードの品質が向上した可能性があります。'
+          : ' 前回から大きな変化はありません。'
+        }
       </div>
     </div>
   );
@@ -1197,12 +1639,41 @@ function App() {
         </div>
 
         {analysisResult && (
-          <div className="results-section">
-            <h2>分析結果</h2>
+          <div className="analysis-result">
+            {/* プロジェクト要約ビュー */}
+            <ProjectSummaryView 
+              result={analysisResult} 
+              fileName={analysisResult.fileName || selectedFile?.name || 'Unknown'} 
+            />
+
+            {/* 比較体験 */}
+            {history.length >= 2 && (
+              <ComparisonView history={history} />
+            )}
+
+            {/* 読む順番ガイド */}
+            <ReadingOrderGuide 
+              files={analysisResult.files} 
+              singleFile={analysisResult.type === 'single' ? analysisResult : undefined} 
+            />
+
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
             <div className="summary-result">
               <div className="summary-stats">
+                {analysisResult.type === 'zip' ? (
+                  <>
+                    <div className="stat-item"><span className="stat-label">総ファイル数</span><span className="stat-value">{analysisResult.totalFiles}</span></div>
+                    <div className="stat-item"><span className="stat-label">総サイズ</span><span className="stat-value">{formatFileSize(analysisResult.summary?.totalSize || 0)}</span></div>
+                    <div className="stat-item"><span className="stat-label">総行数</span><span className="stat-value">{analysisResult.summary?.totalLines}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="stat-item"><span className="stat-label">言語</span><span className="stat-value">{analysisResult.language}</span></div>
+                    <div className="stat-item"><span className="stat-label">サイズ</span><span className="stat-value">{formatFileSize(analysisResult.size || 0)}</span></div>
+                    <div className="stat-item"><span className="stat-label">行数</span><span className="stat-value">{analysisResult.lines}</span></div>
+                  </>
+                )}
                 <h3>{analysisResult.type === 'zip' ? 'プロジェクト概要' : 'ファイル概要'}</h3>
                 <div className="stats-grid">
                   {analysisResult.type === 'zip' ? (
