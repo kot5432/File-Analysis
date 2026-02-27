@@ -884,7 +884,7 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
                   padding: '2px 4px',
                   borderRadius: '3px'
                 }}>
-                  統計的推定
+                  信頼度: {aiLevel.confidence}%
                 </span>
               </div>
               
@@ -1004,16 +1004,8 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
         lineHeight: '1.4'
       }}>
         <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTechs.slice(0, 3).join('・')}を使用した{scale.totalFiles}ファイルのプロジェクトです。
-        {(() => {
-          if (riskLevel.level === 'HIGH') {
-            return '一部のファイルで複雑化が進んでおり、リファクタリングが必要です。';
-          } else if (riskLevel.level === 'MEDIUM') {
-            return '全体的に健全ですが、一部改善の余地があります。';
-          } else {
-            return 'プロジェクトは良好な状態で、現在の品質を維持してください。';
-          }
-        })()}
-        {aiLevel.level === 'HIGH' && ' AI生成コードの可能性があるため、詳細な確認が必要です。'}
+        {riskLevel.level === 'HIGH' && ' リスクが高いため注意が必要です。'}
+        {aiLevel.level === 'HIGH' && ' AI生成コードが含まれている可能性があります。'}
         {reasons.length > 0 && (
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
             <strong>判定理由:</strong> {reasons.join('・')}
@@ -2514,17 +2506,6 @@ const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
-// --- 統一リスクレベル判定関数 ---
-export const getRiskLevel = (score: number): { level: 'LOW' | 'MEDIUM' | 'HIGH', color: string, icon: string } => {
-  if (score >= 70) {
-    return { level: 'HIGH', color: '#dc2626', icon: '🔴' };
-  } else if (score >= 40) {
-    return { level: 'MEDIUM', color: '#f59e0b', icon: '🟡' };
-  } else {
-    return { level: 'LOW', color: '#10b981', icon: '🟢' };
-  }
-};
-
 // --- ブラックボックス指数（BBI）型定義 ---
 interface BlackBoxIndex {
   score: number;
@@ -3678,74 +3659,11 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnaly
   );
 };
 
-const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => {
-  const [sortBy, setSortBy] = useState<'risk' | 'size' | 'lines'>('risk');
-  
-  const getSortedFiles = () => {
-    const sorted = [...files];
-    switch (sortBy) {
-      case 'risk':
-        return sorted.sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
-      case 'size':
-        return sorted.sort((a, b) => b.size - a.size);
-      case 'lines':
-        return sorted.sort((a, b) => b.lines - a.lines);
-      default:
-        return sorted;
-    }
-  };
-
-  return (
-    <div className="important-files">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h3 style={{ margin: 0 }}>主要ファイル</h3>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => setSortBy('risk')}
-            style={{
-              padding: '4px 8px',
-              fontSize: '12px',
-              border: `1px solid ${sortBy === 'risk' ? '#1890ff' : '#d9d9d9'}`,
-              backgroundColor: sortBy === 'risk' ? '#1890ff' : '#fff',
-              color: sortBy === 'risk' ? '#fff' : '#666',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            🔴 リスク順
-          </button>
-          <button
-            onClick={() => setSortBy('size')}
-            style={{
-              padding: '4px 8px',
-              fontSize: '12px',
-              border: `1px solid ${sortBy === 'size' ? '#1890ff' : '#d9d9d9'}`,
-              backgroundColor: sortBy === 'size' ? '#1890ff' : '#fff',
-              color: sortBy === 'size' ? '#fff' : '#666',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            📦 サイズ順
-          </button>
-          <button
-            onClick={() => setSortBy('lines')}
-            style={{
-              padding: '4px 8px',
-              fontSize: '12px',
-              border: `1px solid ${sortBy === 'lines' ? '#1890ff' : '#d9d9d9'}`,
-              backgroundColor: sortBy === 'lines' ? '#1890ff' : '#fff',
-              color: sortBy === 'lines' ? '#fff' : '#666',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            📝 行数順
-          </button>
-        </div>
-      </div>
-      <div className="files-grid">
-        {getSortedFiles().slice(0, 10).map((file, i) => (
+const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => (
+  <div className="important-files">
+    <h3>主要ファイル</h3>
+    <div className="files-grid">
+      {files.sort((a, b) => b.size - a.size).slice(0, 10).map((file, i) => (
         <div key={i} className="file-card" onClick={() => onSelect(file)} style={{ cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <h4 style={{ margin: 0, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.fileName}</h4>
@@ -3768,7 +3686,6 @@ const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) =>
     {files.length > 10 && <p className="more-files">他{files.length - 10}ファイル...</p>}
   </div>
 );
-
 
 // --- Main App Component ---
 
@@ -4376,45 +4293,8 @@ function App() {
                       <div style={{ fontSize: '10px', color, fontWeight: 'bold', marginBottom: '4px' }}>
                         {level === 'CRITICAL' ? '🔴 要対応' : level === 'WARNING' ? '⚠️ 要注意' : '✅ 健全'}
                       </div>
-                      <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2', marginBottom: '8px' }}>
-                        {bbi.interpretation[0] || '主な問題: 高リスクファイル集中'}
-                      </div>
-                      
-                      {/* 寄与度の可視化 */}
-                      <div style={{ marginBottom: '8px' }}>
-                        <div style={{ fontSize: '9px', color: '#666', marginBottom: '4px', fontWeight: 'bold' }}>
-                          🎯 スコアの内訳
-                        </div>
-                        {bbi.contributions && Object.entries(bbi.contributions)
-                          .sort((a, b) => b[1].contribution - a[1].contribution)
-                          .slice(0, 3)
-                          .map(([key, contribution], index) => (
-                            <div key={key} style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              marginBottom: '2px',
-                              fontSize: '8px',
-                              padding: '2px 4px',
-                              backgroundColor: '#f8f9fa',
-                              borderRadius: '3px'
-                            }}>
-                              <span style={{ color: '#666' }}>
-                                {contribution.description}
-                              </span>
-                              <span style={{ 
-                                fontWeight: 'bold',
-                                color: contribution.contribution >= 15 ? '#dc2626' : contribution.contribution >= 10 ? '#f59e0b' : '#10b981'
-                              }}>
-                                +{contribution.contribution}点
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                      
                       <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                        💡 最も影響している要因: {bbi.contributions && Object.entries(bbi.contributions)
-                          .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[1]?.description || '平均リスク'}
+                        {bbi.interpretation[0] || '主な問題: 高リスクファイル集中'}
                       </div>
                       <div style={{ 
                         position: 'absolute', 
