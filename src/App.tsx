@@ -2545,6 +2545,303 @@ const ProjectHealthScoreView: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
+// --- 技術的負債ヒートマップ型定義 ---
+interface TechDebtFile {
+  path: string;
+  riskScore: number;
+  heatLevel: 'low' | 'medium' | 'high';
+  lines: number;
+  language: string;
+  size: number;
+}
+
+// --- ヒートレベル計算 ---
+const calculateHeatLevel = (riskScore: number): 'low' | 'medium' | 'high' => {
+  if (riskScore >= 70) return 'high';
+  if (riskScore >= 40) return 'medium';
+  return 'low';
+};
+
+// --- 技術的負債データ生成 ---
+const generateTechDebtData = (analysis: AnalysisResult): TechDebtFile[] => {
+  if (analysis.type !== 'zip' || !analysis.files) {
+    return [];
+  }
+  
+  return analysis.files.map(file => {
+    const riskScore = calculateFileRiskScore(file);
+    const heatLevel = calculateHeatLevel(riskScore);
+    
+    return {
+      path: file.fileName,
+      riskScore,
+      heatLevel,
+      lines: file.lines,
+      language: file.language,
+      size: file.size || 0
+    };
+  }).sort((a, b) => b.riskScore - a.riskScore); // 🔴 高リスク → 🟡 → 🟢 の順
+};
+
+// --- 技術的負債集中度計算（未踏で光る機能）---
+const calculateTechDebtConcentration = (files: TechDebtFile[]): { concentration: string; percentage: number } => {
+  if (files.length === 0) return { concentration: 'LOW', percentage: 0 };
+  
+  // 上位20%のファイルが全体のリスクの何%を占めるか
+  const top20Count = Math.max(1, Math.ceil(files.length * 0.2));
+  const top20Files = files.slice(0, top20Count);
+  const totalRisk = files.reduce((sum, file) => sum + file.riskScore, 0);
+  const top20Risk = top20Files.reduce((sum, file) => sum + file.riskScore, 0);
+  const concentration = totalRisk > 0 ? (top20Risk / totalRisk) * 100 : 0;
+  
+  let level: string;
+  if (concentration >= 65) level = 'HIGH';
+  else if (concentration >= 45) level = 'MEDIUM';
+  else level = 'LOW';
+  
+  return { concentration: level, percentage: Math.round(concentration) };
+};
+
+// --- 技術的負債ヒートマップコンポーネント ---
+const TechDebtHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const techDebtFiles = generateTechDebtData(analysis);
+  
+  if (techDebtFiles.length === 0) {
+    return null;
+  }
+  
+  // 色設計（RiskGaugeと統一）
+  const heatColors = {
+    low: { bg: '#dcfce7', border: '#22c55e', icon: '🟢', text: '#166534' },
+    medium: { bg: '#fef3c7', border: '#eab308', icon: '🟡', text: '#713f12' },
+    high: { bg: '#fee2e2', border: '#ef4444', icon: '🔴', text: '#991b1b' }
+  };
+  
+  // 集約サマリー
+  const summary = {
+    high: techDebtFiles.filter(f => f.heatLevel === 'high').length,
+    medium: techDebtFiles.filter(f => f.heatLevel === 'medium').length,
+    low: techDebtFiles.filter(f => f.heatLevel === 'low').length
+  };
+  
+  // 技術的負債集中度
+  const concentration = calculateTechDebtConcentration(techDebtFiles);
+  
+  // ファイル選択ハンドラ
+  const handleFileClick = (file: TechDebtFile) => {
+    // 既存のファイル詳細ビューに遷移するロジック
+    const fileElement = document.querySelector(`[data-file-path="${file.path}"]`);
+    if (fileElement) {
+      fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // ハイライト効果（簡易版）
+      (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
+      setTimeout(() => {
+        (fileElement as HTMLElement).style.backgroundColor = '';
+      }, 2000);
+    }
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        🔥 技術的負債ヒートマップ
+      </h3>
+      
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 プロジェクト全体の技術的負債分布を可視化。赤いファイルから優先的に改善しましょう。
+      </div>
+      
+      {/* 集約サマリー */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
+          📊 技術的負債サマリー
+        </h4>
+        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.high.border }} />
+            <span style={{ fontSize: '13px', color: '#666' }}>High Risk: <strong>{summary.high}</strong></span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.medium.border }} />
+            <span style={{ fontSize: '13px', color: '#666' }}>Medium: <strong>{summary.medium}</strong></span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.low.border }} />
+            <span style={{ fontSize: '13px', color: '#666' }}>Low: <strong>{summary.low}</strong></span>
+          </div>
+        </div>
+        
+        {/* 技術的負債集中度（未踏で光る機能） */}
+        <div style={{
+          backgroundColor: concentration.concentration === 'HIGH' ? '#fee2e2' : 
+                          concentration.concentration === 'MEDIUM' ? '#fef3c7' : '#dcfce7',
+          border: `1px solid ${concentration.concentration === 'HIGH' ? '#ef4444' : 
+                              concentration.concentration === 'MEDIUM' ? '#eab308' : '#22c55e'}`,
+          borderRadius: '6px',
+          padding: '8px 12px',
+          display: 'inline-block'
+        }}>
+          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#666' }}>
+            ⭐ 技術的負債集中度: {concentration.concentration} (上位20%が{concentration.percentage}%のリスクを占める)
+          </span>
+        </div>
+      </div>
+      
+      {/* ヒートマップグリッド */}
+      <div>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          📁 ファイル別リスク分布
+        </h4>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: '8px',
+          maxHeight: '500px',
+          overflowY: 'auto'
+        }}>
+          {techDebtFiles.map((file) => {
+            const heatColor = heatColors[file.heatLevel];
+            
+            return (
+              <div
+                key={file.path}
+                data-file-path={file.path}
+                style={{
+                  backgroundColor: heatColor.bg,
+                  border: `2px solid ${heatColor.border}`,
+                  borderRadius: '8px',
+                  padding: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  position: 'relative',
+                  minHeight: '80px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  e.currentTarget.style.zIndex = '10';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.zIndex = '1';
+                }}
+                onClick={() => handleFileClick(file)}
+                title={`${file.path}\nRisk: ${file.riskScore}\nLines: ${file.lines}\nLanguage: ${file.language}`}
+              >
+                {/* ファイル名とアイコン */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '16px' }}>{heatColor.icon}</span>
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    color: heatColor.text,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1
+                  }}>
+                    {file.path.split('/').pop()}
+                  </div>
+                </div>
+                
+                {/* リスクスコア */}
+                <div style={{
+                  fontSize: '11px',
+                  color: '#666',
+                  marginBottom: '4px'
+                }}>
+                  Risk: <strong style={{ color: heatColor.text }}>{file.riskScore}</strong>
+                </div>
+                
+                {/* 詳細情報 */}
+                <div style={{ fontSize: '10px', color: '#888', lineHeight: '1.2' }}>
+                  <div>{file.lines} lines</div>
+                  <div>{file.language}</div>
+                </div>
+                
+                {/* ホバー時の詳細ツールチップ */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  backgroundColor: 'white',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  zIndex: '100',
+                  opacity: '0',
+                  pointerEvents: 'none',
+                  transition: 'opacity 0.2s',
+                  width: '200px',
+                  marginBottom: '4px'
+                }}
+                className="heatmap-tooltip"
+              >
+                <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '4px', color: '#262626' }}>
+                  {file.path}
+                </div>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
+                  Risk: {file.riskScore} ({file.heatLevel.toUpperCase()})
+                </div>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
+                  Lines: {file.lines}
+                </div>
+                <div style={{ fontSize: '10px', color: '#666' }}>
+                  Language: {file.language}
+                </div>
+              </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* 凡例 */}
+      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {Object.entries(heatColors).map(([level, color]) => (
+          <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '3px',
+              backgroundColor: color.border
+            }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              {level.toUpperCase()} ({level === 'high' ? '70-100' : level === 'medium' ? '40-69' : '0-39'})
+            </span>
+          </div>
+        ))}
+      </div>
+      
+      {/* ツールチップ用スタイル */}
+      <style>{`
+        .heatmap-tooltip {
+          opacity: 0;
+          pointer-events: none;
+        }
+        div:hover .heatmap-tooltip {
+          opacity: 1;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -3455,6 +3752,9 @@ function App() {
 
             {/* リスクヒートマップ */}
             <RiskHeatmapWithFixes analysis={analysisResult} />
+
+            {/* 技術的負債ヒートマップ */}
+            <TechDebtHeatmap analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
