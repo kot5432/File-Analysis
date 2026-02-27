@@ -3526,6 +3526,520 @@ const BlackBoxIndexView: React.FC<{ analysis: AnalysisResult; history: AnalysisH
   );
 };
 
+// --- 改善アクション型定義 ---
+interface ImprovementAction {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  category: 'structure' | 'documentation' | 'performance' | 'maintenance' | 'quality';
+  estimatedEffort: 'small' | 'medium' | 'large';
+  why?: string; // 教育モード用
+  filePath?: string;
+}
+
+interface ProjectActionPlan {
+  critical: ImprovementAction[];
+  high: ImprovementAction[];
+  medium: ImprovementAction[];
+  low: ImprovementAction[];
+  summary: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+// --- アクション生成ルールエンジン ---
+const generateActionRules = (): Array<{
+  condition: (file: FileAnalysis) => boolean;
+  actions: Omit<ImprovementAction, 'id' | 'filePath'>[];
+}> => {
+  return [
+    // 深いネスト
+    {
+      condition: (file) => (file.blackboxRisk?.breakdown?.nestingDepth || 0) >= 5,
+      actions: [
+        {
+          title: '関数分割を検討',
+          description: '大きな関数を複数の小さな関数に分割して、可読性と保守性を向上させます',
+          priority: 'high',
+          category: 'structure',
+          estimatedEffort: 'medium',
+          why: 'Deep nesting increases cognitive load and makes code harder to understand'
+        },
+        {
+          title: 'early return を使う',
+          description: '条件分岐の先にreturn文を配置して、ネストを浅くするリファクタリング手法を適用します',
+          priority: 'medium',
+          category: 'structure',
+          estimatedEffort: 'small',
+          why: 'Early returns reduce nesting and improve code readability'
+        },
+        {
+          title: 'ガード節を導入',
+          description: '入力値の検証を関数の先頭で行い、異常系を早期に処理するガード節パターンを導入します',
+          priority: 'medium',
+          category: 'structure',
+          estimatedEffort: 'small',
+          why: 'Guard clauses make error handling more explicit and reduce nesting'
+        }
+      ]
+    },
+    // コメント不足
+    {
+      condition: (file) => (file.blackboxRisk?.breakdown?.commentRate || 0) < 0.05,
+      actions: [
+        {
+          title: '公開関数に説明追加',
+          description: 'エクスポートされている関数にJSDoc形式で目的、引数、戻り値を文書化します',
+          priority: 'high',
+          category: 'documentation',
+          estimatedEffort: 'medium',
+          why: 'Documentation helps other developers understand API contracts'
+        },
+        {
+          title: '複雑ロジックにコメント',
+          description: 'ビジネスロジックや複雑な処理部分に、なぜそう実装しているかを説明するコメントを追加します',
+          priority: 'medium',
+          category: 'documentation',
+          estimatedEffort: 'medium',
+          why: 'Comments explain the intent behind complex business logic'
+        },
+        {
+          title: 'README補足',
+          description: 'プロジェクトのREADMEに、このファイルの役割と使用方法を追記します',
+          priority: 'low',
+          category: 'documentation',
+          estimatedEffort: 'small',
+          why: 'Good documentation improves project maintainability'
+        }
+      ]
+    },
+    // 巨大ファイル
+    {
+      condition: (file) => file.lines >= 800,
+      actions: [
+        {
+          title: 'ファイル分割',
+          description: '関連する機能を別のファイルに分離し、単一責任の原則に従ってファイルを整理します',
+          priority: 'critical',
+          category: 'structure',
+          estimatedEffort: 'large',
+          why: 'Large files are harder to maintain and understand'
+        },
+        {
+          title: '責務分離',
+          description: 'ファイル内の異なる責務を持つコードを、それぞれ専用のモジュールに分割します',
+          priority: 'high',
+          category: 'structure',
+          estimatedEffort: 'large',
+          why: 'Single responsibility principle improves code organization'
+        },
+        {
+          title: 'モジュール化',
+          description: '関連する関数をクラスやモジュールにまとめて、コードの構造を改善します',
+          priority: 'medium',
+          category: 'structure',
+          estimatedEffort: 'medium',
+          why: 'Modularization improves code reusability and testability'
+        }
+      ]
+    },
+    // 未使用関数あり
+    {
+      condition: (file) => file.structure.functions && file.structure.functions.length > 5,
+      actions: [
+        {
+          title: '未使用関数削除',
+          description: '本当に使用されていない関数を安全に削除して、コードベースを整理します',
+          priority: 'medium',
+          category: 'maintenance',
+          estimatedEffort: 'small',
+          why: 'Dead code increases maintenance burden and confusion'
+        },
+        {
+          title: 'tree-shaking確認',
+          description: 'ビルドツールのtree-shakingが正しく機能しているか確認し、未使用コードを削除します',
+          priority: 'low',
+          category: 'performance',
+          estimatedEffort: 'small',
+          why: 'Tree shaking reduces bundle size and improves performance'
+        },
+        {
+          title: 'export見直し',
+          description: '本当に公開する必要がある関数のみをexportするように見直します',
+          priority: 'low',
+          category: 'maintenance',
+          estimatedEffort: 'small',
+          why: 'Unnecessary exports increase API surface area'
+        }
+      ]
+    },
+    // AI生成疑い高
+    {
+      condition: (file) => (file.blackboxRisk?.aiEstimation?.aiLikelihood || 0) >= 70,
+      actions: [
+        {
+          title: '手動レビュー推奨',
+          description: 'AI生成コードは品質にばらつきがあるため、人間による詳細なレビューが必要です',
+          priority: 'high',
+          category: 'quality',
+          estimatedEffort: 'medium',
+          why: 'AI-generated code may contain subtle bugs or security issues'
+        },
+        {
+          title: 'エッジケース確認',
+          description: 'AI生成コードは一般的なケースに最適化されがちなので、エッジケースの動作を確認します',
+          priority: 'medium',
+          category: 'quality',
+          estimatedEffort: 'medium',
+          why: 'Edge cases are often overlooked in AI-generated code'
+        },
+        {
+          title: 'テスト追加',
+          description: 'AI生成コードの動作を保証するため、包括的なテストを追加します',
+          priority: 'high',
+          category: 'quality',
+          estimatedEffort: 'large',
+          why: 'Tests ensure AI-generated code works correctly in all scenarios'
+        }
+      ]
+    },
+    // 中程度のリスク（汎用）
+    {
+      condition: (file) => {
+        const riskScore = calculateFileRiskScore(file);
+        return riskScore >= 40 && riskScore < 70;
+      },
+      actions: [
+        {
+          title: 'コードスタイル統一',
+          description: 'プロジェクトのコーディング規約に合わせて、コードスタイルを統一します',
+          priority: 'low',
+          category: 'maintenance',
+          estimatedEffort: 'small',
+          why: 'Consistent code style improves readability'
+        },
+        {
+          title: '変数名改善',
+          description: '意味のある変数名を使用して、コードの自己文書化性を向上させます',
+          priority: 'low',
+          category: 'documentation',
+          estimatedEffort: 'small',
+          why: 'Good variable names reduce the need for comments'
+        }
+      ]
+    }
+  ];
+};
+
+// --- ファイル別アクション生成 ---
+const generateFileActions = (file: FileAnalysis): ImprovementAction[] => {
+  const rules = generateActionRules();
+  const actions: ImprovementAction[] = [];
+  
+  rules.forEach((rule, ruleIndex) => {
+    if (rule.condition(file)) {
+      rule.actions.forEach((action, actionIndex) => {
+        actions.push({
+          ...action,
+          id: `${file.fileName}_${ruleIndex}_${actionIndex}`,
+          filePath: file.fileName
+        });
+      });
+    }
+  });
+  
+  // 優先度でソート
+  const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+  return actions.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+};
+
+// --- プロジェクト全体アクションプラン生成 ---
+const generateProjectActionPlan = (analysis: AnalysisResult): ProjectActionPlan => {
+  if (analysis.type !== 'zip' || !analysis.files) {
+    return {
+      critical: [],
+      high: [],
+      medium: [],
+      low: [],
+      summary: { critical: 0, high: 0, medium: 0, low: 0 }
+    };
+  }
+  
+  const allActions: ImprovementAction[] = [];
+  
+  analysis.files.forEach(file => {
+    const fileActions = generateFileActions(file);
+    allActions.push(...fileActions);
+  });
+  
+  // 優先度で分類
+  const plan: ProjectActionPlan = {
+    critical: allActions.filter(a => a.priority === 'critical'),
+    high: allActions.filter(a => a.priority === 'high'),
+    medium: allActions.filter(a => a.priority === 'medium'),
+    low: allActions.filter(a => a.priority === 'low'),
+    summary: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0
+    }
+  };
+  
+  // サマリー更新
+  plan.summary.critical = plan.critical.length;
+  plan.summary.high = plan.high.length;
+  plan.summary.medium = plan.medium.length;
+  plan.summary.low = plan.low.length;
+  
+  return plan;
+};
+
+// --- レポート出力機能 ---
+const generateActionReport = (plan: ProjectActionPlan): string => {
+  let report = '# Recommended Refactors\n\n';
+  
+  // Critical actions
+  if (plan.critical.length > 0) {
+    report += '## 🔥 Critical Actions\n\n';
+    plan.critical.forEach((action, index) => {
+      report += `${index + 1}. **${action.title}** (${action.filePath})\n`;
+      report += `   - ${action.description}\n`;
+      if (action.why) report += `   - *Why: ${action.why}*\n`;
+      report += '\n';
+    });
+  }
+  
+  // High priority actions
+  if (plan.high.length > 0) {
+    report += '## ⚠️ High Priority Actions\n\n';
+    plan.high.slice(0, 5).forEach((action, index) => {
+      report += `${index + 1}. **${action.title}** (${action.filePath})\n`;
+      report += `   - ${action.description}\n`;
+      if (action.why) report += `   - *Why: ${action.why}*\n`;
+      report += '\n';
+    });
+    
+    if (plan.high.length > 5) {
+      report += `... and ${plan.high.length - 5} more high priority actions\n\n`;
+    }
+  }
+  
+  // Summary
+  report += '## Summary\n\n';
+  report += `- Critical: ${plan.summary.critical}\n`;
+  report += `- High: ${plan.summary.high}\n`;
+  report += `- Medium: ${plan.summary.medium}\n`;
+  report += `- Low: ${plan.summary.low}\n`;
+  report += `\n**Total: ${plan.summary.critical + plan.summary.high + plan.summary.medium + plan.summary.low} actions**\n`;
+  
+  return report;
+};
+
+// --- 改善アクション表示コンポーネント ---
+const ImprovementActionEngine: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const actionPlan = generateProjectActionPlan(analysis);
+  
+  const totalActions = actionPlan.summary.critical + actionPlan.summary.high + actionPlan.summary.medium + actionPlan.summary.low;
+  
+  if (totalActions === 0) {
+    return null;
+  }
+  
+  // 優先度の色とアイコン
+  const priorityConfig = {
+    critical: { color: '#ef4444', bgColor: '#fee2e2', icon: '🔥', label: 'Critical' },
+    high: { color: '#f97316', bgColor: '#fed7aa', icon: '⚠️', label: 'High' },
+    medium: { color: '#eab308', bgColor: '#fef3c7', icon: '💡', label: 'Medium' },
+    low: { color: '#22c55e', bgColor: '#dcfce7', icon: '✅', label: 'Low' }
+  };
+  
+  // レポートコピー機能
+  const handleCopyReport = () => {
+    const report = generateActionReport(actionPlan);
+    navigator.clipboard.writeText(report).then(() => {
+      alert('改善アクションレポートをコピーしました！');
+    });
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        🛠️ 改善アクション自動生成
+      </h3>
+      
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 解析結果から具体的な改善アクションを自動生成。優先度の高いものから着手しましょう。
+      </div>
+      
+      {/* 全体アクションサマリー */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+            Recommended Improvements
+          </h4>
+          <button
+            onClick={handleCopyReport}
+            style={{
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+          >
+            📋 レポートコピー
+          </button>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          {Object.entries(priorityConfig).map(([priority, config]) => {
+            const count = actionPlan.summary[priority as keyof typeof actionPlan.summary];
+            if (count === 0) return null;
+            
+            return (
+              <div
+                key={priority}
+                style={{
+                  backgroundColor: config.bgColor,
+                  border: `1px solid ${config.color}`,
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span style={{ fontSize: '16px' }}>{config.icon}</span>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: config.color }}>
+                  {config.label} ({count})
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Critical Actions */}
+      {actionPlan.critical.length > 0 && (
+        <div style={{
+          backgroundColor: 'white',
+          border: '1px solid #e0e0e0',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '16px'
+        }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#ef4444' }}>
+            🔥 Critical Actions
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {actionPlan.critical.slice(0, 3).map((action, index) => (
+              <div
+                key={action.id}
+                style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  padding: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#991b1b' }}>
+                    {index + 1}. {action.title}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fef2f2', padding: '2px 6px', borderRadius: '4px' }}>
+                    {action.filePath}
+                  </div>
+                </div>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
+                  {action.description}
+                </div>
+                {action.why && (
+                  <div style={{ fontSize: '11px', color: '#7f1d1d', fontStyle: 'italic' }}>
+                    Why: {action.why}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {actionPlan.critical.length > 3 && (
+            <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: '8px' }}>
+              ... and {actionPlan.critical.length - 3} more critical actions
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* High Priority Actions */}
+      {actionPlan.high.length > 0 && (
+        <div style={{
+          backgroundColor: 'white',
+          border: '1px solid #e0e0e0',
+          borderRadius: '8px',
+          padding: '16px'
+        }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#f97316' }}>
+            ⚠️ High Priority Actions
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {actionPlan.high.slice(0, 5).map((action, index) => (
+              <div
+                key={action.id}
+                style={{
+                  backgroundColor: '#fed7aa',
+                  border: '1px solid #f97316',
+                  borderRadius: '6px',
+                  padding: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#9a3412' }}>
+                    {index + 1}. {action.title}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#666', backgroundColor: '#fff7ed', padding: '1px 4px', borderRadius: '3px' }}>
+                    {action.filePath}
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  {action.description}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {actionPlan.high.length > 5 && (
+            <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: '8px' }}>
+              ... and {actionPlan.high.length - 5} more high priority actions
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -4445,6 +4959,9 @@ function App() {
 
             {/* リファクタ優先度エンジン */}
             <RefactorPriorityEngine analysis={analysisResult} />
+
+            {/* 改善アクション自動生成エンジン */}
+            <ImprovementActionEngine analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
