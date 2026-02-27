@@ -3208,6 +3208,324 @@ const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
+// --- ブラックボックス指数（BBI）型定義 ---
+interface BlackBoxIndex {
+  score: number;
+  level: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  breakdown: {
+    avgRisk: number;
+    highRiskRatio: number;
+    avgNestingDepth: number;
+    lowCommentRatio: number;
+    aiSuspiciousRatio: number;
+  };
+  interpretation: string[];
+}
+
+// --- BBIレベル分類 ---
+const getBBILevel = (score: number): { level: string; color: string; icon: string; status: string } => {
+  if (score >= 70) return { level: 'CRITICAL', color: '#ef4444', icon: '🔴', status: '⚠️ CRITICAL' };
+  if (score >= 40) return { level: 'WARNING', color: '#eab308', icon: '🟡', status: '⚠️ WARNING' };
+  return { level: 'HEALTHY', color: '#22c55e', icon: '🟢', status: '✅ HEALTHY' };
+};
+
+// --- ブラックボックス指数計算エンジン ---
+const calculateBlackBoxIndex = (analysis: AnalysisResult): BlackBoxIndex | null => {
+  if (analysis.type !== 'zip' || !analysis.files || analysis.files.length === 0) {
+    return null;
+  }
+  
+  const files = analysis.files;
+  
+  // Step 9-2: 各指標の算出
+  
+  // ① 平均リスク
+  const riskScores = files.map(file => calculateFileRiskScore(file));
+  const avgRisk = riskScores.reduce((sum, score) => sum + score, 0) / riskScores.length;
+  
+  // ② 高リスクファイル率
+  const highRiskFiles = files.filter(file => calculateFileRiskScore(file) >= 70);
+  const highRiskRatio = highRiskFiles.length / files.length;
+  
+  // ③ 平均ネスト深度（ファイル平均の平均）
+  const nestingDepths = files
+    .map(file => file.blackboxRisk?.breakdown?.nestingDepth || 0)
+    .filter(depth => depth > 0);
+  const avgNestingDepth = nestingDepths.length > 0 
+    ? nestingDepths.reduce((sum, depth) => sum + depth, 0) / nestingDepths.length 
+    : 0;
+  
+  // ④ コメント不足率
+  const lowCommentFiles = files.filter(file => {
+    const commentRate = file.blackboxRisk?.breakdown?.commentRate || 0;
+    return commentRate < 0.05; // 5%未満をコメント不足と判定
+  });
+  const lowCommentRatio = lowCommentFiles.length / files.length;
+  
+  // ⑤ AI疑い率
+  const aiSuspiciousFiles = files.filter(file => {
+    const aiLikelihood = file.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
+    return aiLikelihood >= 70; // 70%以上をAI疑いと判定
+  });
+  const aiSuspiciousRatio = aiSuspiciousFiles.length / files.length;
+  
+  // Step 9-3: 正規化（0-100に揃える）
+  const avgRiskNormalized = Math.min(avgRisk, 100);
+  const highRiskNormalized = highRiskRatio * 100;
+  const avgNestingNormalized = Math.min((avgNestingDepth / 8) * 100, 100); // 8階層を上限
+  const lowCommentNormalized = lowCommentRatio * 100;
+  const aiSuspiciousNormalized = aiSuspiciousRatio * 100;
+  
+  // Step 9-4: BBI最終式
+  const bbiScore = Math.min(100,
+    0.35 * avgRiskNormalized +           // 平均リスク（35%）
+    0.25 * highRiskNormalized +          // 高リスクファイル率（25%）
+    0.15 * avgNestingNormalized +         // 平均ネスト深度（15%）
+    0.15 * lowCommentNormalized +        // コメント不足率（15%）
+    0.10 * aiSuspiciousNormalized         // AI疑い率（10%）
+  );
+  
+  // Step 9-6: 解釈テキスト生成
+  const interpretation: string[] = [];
+  if (highRiskRatio >= 0.3) {
+    interpretation.push('High-risk files are concentrated.');
+  }
+  if (lowCommentRatio >= 0.4) {
+    interpretation.push('Documentation is insufficient.');
+  }
+  if (avgNestingDepth >= 4) {
+    interpretation.push('Complex nesting detected.');
+  }
+  if (avgRisk >= 60) {
+    interpretation.push('Overall complexity is high.');
+  }
+  if (aiSuspiciousRatio >= 0.2) {
+    interpretation.push('AI-generated code may require review.');
+  }
+  if (interpretation.length === 0) {
+    interpretation.push('Project appears well-structured.');
+  }
+  
+  // レベル判定
+  const { level, color, icon, status } = getBBILevel(bbiScore);
+  
+  return {
+    score: Math.round(bbiScore),
+    level: level as 'HEALTHY' | 'WARNING' | 'CRITICAL',
+    breakdown: {
+      avgRisk: Math.round(avgRiskNormalized),
+      highRiskRatio: Math.round(highRiskNormalized),
+      avgNestingDepth: Math.round(avgNestingNormalized),
+      lowCommentRatio: Math.round(lowCommentNormalized),
+      aiSuspiciousRatio: Math.round(aiSuspiciousNormalized)
+    },
+    interpretation
+  };
+};
+
+// --- 履歴との連携（激強）---
+const getBBIHistory = (currentBBI: BlackBoxIndex, history: AnalysisHistory[]): { previous: number; change: number; improved: boolean } => {
+  // 簡易的な履歴比較（最新の前回との比較）
+  if (history.length < 2) {
+    return { previous: 0, change: 0, improved: false };
+  }
+  
+  // 前回のBBIを計算（簡易版）
+  const previousHistory = history[history.length - 2];
+  const previousBBI = calculateBlackBoxIndex(previousHistory.fullResult);
+  
+  if (!previousBBI) {
+    return { previous: 0, change: 0, improved: false };
+  }
+  
+  const change = currentBBI.score - previousBBI.score;
+  return {
+    previous: previousBBI.score,
+    change: Math.abs(change),
+    improved: change < 0 // スコアが下がった方が改善
+  };
+};
+
+// --- ブラックボックス指数表示コンポーネント ---
+const BlackBoxIndexView: React.FC<{ analysis: AnalysisResult; history: AnalysisHistory[] }> = ({ analysis, history }) => {
+  const bbi = calculateBlackBoxIndex(analysis);
+  const historyData = bbi ? getBBIHistory(bbi, history) : null;
+  
+  if (!bbi) {
+    return null;
+  }
+  
+  const { level, color, icon, status } = getBBILevel(bbi.score);
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: `2px solid ${color}`,
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        📊 ブラックボックス指数（BBI）
+      </h3>
+      
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 プロジェクト全体のブラックボックス度を表す総合評価。0に近いほど健全です。
+      </div>
+      
+      {/* プロジェクト健康ゲージ */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '20px',
+        marginBottom: '20px',
+        textAlign: 'center'
+      }}>
+        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+          Black Box Index
+        </h4>
+        
+        {/* メインスコア表示 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '16px' }}>
+          <div style={{
+            fontSize: '48px',
+            fontWeight: 'bold',
+            color: color
+          }}>
+            {bbi.score}
+          </div>
+          <div style={{ fontSize: '24px', color: '#666' }}>/ 100</div>
+          <div style={{
+            backgroundColor: color,
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            {icon} {status}
+          </div>
+        </div>
+        
+        {/* ゲージ表示（RiskGaugeを再利用） */}
+        <div style={{ width: '100%', maxWidth: '300px', margin: '0 auto 16px' }}>
+          <div style={{
+            width: '100%',
+            height: '20px',
+            backgroundColor: '#e5e7eb',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: `${bbi.score}%`,
+              height: '100%',
+              backgroundColor: color,
+              transition: 'width 0.3s ease'
+            }} />
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              color: bbi.score > 50 ? 'white' : '#374151'
+            }}>
+              {bbi.score}%
+            </div>
+          </div>
+        </div>
+        
+        {/* 履歴比較 */}
+        {historyData && historyData.previous > 0 && (
+          <div style={{
+            backgroundColor: historyData.improved ? '#dcfce7' : '#fee2e2',
+            border: `1px solid ${historyData.improved ? '#22c55e' : '#ef4444'}`,
+            borderRadius: '6px',
+            padding: '8px 12px',
+            display: 'inline-block',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            color: historyData.improved ? '#166534' : '#991b1b'
+          }}>
+            Previous: {historyData.previous} → Current: {bbi.score} 
+            {historyData.improved ? ' ▲' : ' ▼'} {historyData.change}
+          </div>
+        )}
+      </div>
+      
+      {/* サブ指標内訳 */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
+          📈 Breakdown
+        </h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Avg Risk:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.avgRisk >= 60 ? '#ef4444' : '#22c55e' }}>
+              {bbi.breakdown.avgRisk}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>High Risk Files:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.highRiskRatio >= 30 ? '#ef4444' : '#22c55e' }}>
+              {bbi.breakdown.highRiskRatio}%
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Deep Nesting:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.avgNestingDepth >= 50 ? '#ef4444' : '#22c55e' }}>
+              {bbi.breakdown.avgNestingDepth}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>Low Comments:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.lowCommentRatio >= 40 ? '#ef4444' : '#22c55e' }}>
+              {bbi.breakdown.lowCommentRatio}%
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#666' }}>AI Suspicious:</span>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.aiSuspiciousRatio >= 20 ? '#ef4444' : '#22c55e' }}>
+              {bbi.breakdown.aiSuspiciousRatio}%
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      {/* 解釈テキスト */}
+      <div style={{
+        backgroundColor: '#f3f4f6',
+        border: '1px solid #d1d5db',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
+          🔍 解釈
+        </h4>
+        <ul style={{ margin: 0, paddingLeft: '20px' }}>
+          {bbi.interpretation.map((text, index) => (
+            <li key={index} style={{ fontSize: '13px', color: '#374151', marginBottom: '4px', lineHeight: '1.4' }}>
+              {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -4094,6 +4412,9 @@ function App() {
           <div className="analysis-result">
             {/* プロジェクト健全性スコア */}
             <ProjectHealthScoreView analysis={analysisResult} />
+
+            {/* ブラックボックス指数（BBI） */}
+            <BlackBoxIndexView analysis={analysisResult} history={history} />
 
             {/* プロジェクト要約ビュー */}
             <ProjectSummaryView 
