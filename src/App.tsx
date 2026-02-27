@@ -158,11 +158,79 @@ const detectLanguage = (path: string): string => {
 
 const detectTechnologies = (content: string, language: string): string[] => {
   const techs: string[] = [];
-  if (content.includes('import React') || content.includes('from "react"')) techs.push('React');
-  if (content.includes('require(') || content.includes('import ')) techs.push('Node.js');
+  
+  // フレームワーク検出
+  if (content.includes('import React') || content.includes('from "react"') || content.includes('React.createElement')) techs.push('React');
+  if (content.includes('import Vue') || content.includes('from "vue"') || content.includes('Vue.createApp')) techs.push('Vue.js');
+  if (content.includes('import Angular') || content.includes('@angular') || content.includes('@Component')) techs.push('Angular');
+  if (content.includes('import Svelte') || content.includes('from "svelte"')) techs.push('Svelte');
+  
+  // バックエンドフレームワーク
+  if (content.includes('express') || content.includes('app.get') || content.includes('app.post')) techs.push('Express.js');
+  if (content.includes('fastify') || content.includes('fastify.')) techs.push('Fastify');
+  if (content.includes('koa') || content.includes('koa.')) techs.push('Koa.js');
+  if (content.includes('nest') || content.includes('@nestjs') || content.includes('@Controller')) techs.push('NestJS');
+  if (content.includes('django') || content.includes('from django') || content.includes('models.Model')) techs.push('Django');
+  if (content.includes('flask') || content.includes('Flask') || content.includes('app.route')) techs.push('Flask');
+  if (content.includes('spring') || content.includes('@SpringBootApplication') || content.includes('@RestController')) techs.push('Spring Boot');
+  
+  // ライブラリ検出
+  if (content.includes('lodash') || content.includes('_.')) techs.push('Lodash');
+  if (content.includes('axios') || content.includes('axios.')) techs.push('Axios');
+  if (content.includes('fetch(') || content.includes('await fetch')) techs.push('Fetch API');
+  if (content.includes('moment') || content.includes('moment()')) techs.push('Moment.js');
+  if (content.includes('date-fns') || content.includes('format(')) techs.push('date-fns');
+  if (content.includes('chart.js') || content.includes('Chart(')) techs.push('Chart.js');
+  if (content.includes('d3') || content.includes('d3.')) techs.push('D3.js');
+  if (content.includes('three') || content.includes('THREE.')) techs.push('Three.js');
+  
+  // スタイリング
+  if (content.includes('@emotion') || content.includes('css``')) techs.push('Emotion');
+  if (content.includes('styled-components') || content.includes('styled.')) techs.push('Styled Components');
+  if (content.includes('tailwind') || content.includes('className=') || content.includes('@tailwind')) techs.push('Tailwind CSS');
+  if (content.includes('bootstrap') || content.includes('btn ') || content.includes('container')) techs.push('Bootstrap');
+  if (content.includes('material-ui') || content.includes('@mui') || content.includes('<Button')) techs.push('Material-UI');
+  
+  // 状態管理
+  if (content.includes('redux') || content.includes('useSelector') || content.includes('dispatch')) techs.push('Redux');
+  if (content.includes('mobx') || content.includes('@observable') || content.includes('action')) techs.push('MobX');
+  if (content.includes('zustand') || content.includes('create(')) techs.push('Zustand');
+  if (content.includes('recoil') || content.includes('useRecoilState')) techs.push('Recoil');
+  
+  // 言語ランタイム
+  if (content.includes('require(') || content.includes('module.exports') || content.includes('__dirname')) techs.push('Node.js');
+  if (content.includes('deno') || content.includes('Deno.')) techs.push('Deno');
+  if (content.includes('bun') || content.includes('Bun.')) techs.push('Bun');
+  
+  // ビルドツール
+  if (content.includes('vite') || content.includes('import.meta.hot')) techs.push('Vite');
+  if (content.includes('webpack') || content.includes('module.exports')) techs.push('Webpack');
+  if (content.includes('rollup') || content.includes('rollup.')) techs.push('Rollup');
+  if (content.includes('parcel') || content.includes('Parcel')) techs.push('Parcel');
+  
+  // テストフレームワーク
+  if (content.includes('jest') || content.includes('describe(') || content.includes('it(')) techs.push('Jest');
+  if (content.includes('mocha') || content.includes('mocha.')) techs.push('Mocha');
+  if (content.includes('cypress') || content.includes('cy.')) techs.push('Cypress');
+  if (content.includes('playwright') || content.includes('test(')) techs.push('Playwright');
+  
+  // データベース
+  if (content.includes('mongodb') || content.includes('MongoClient')) techs.push('MongoDB');
+  if (content.includes('mysql') || content.includes('mysql2')) techs.push('MySQL');
+  if (content.includes('postgresql') || content.includes('pg.')) techs.push('PostgreSQL');
+  if (content.includes('sqlite') || content.includes('sqlite3')) techs.push('SQLite');
+  if (content.includes('redis') || content.includes('redis.')) techs.push('Redis');
+  
+  // 言語特有
   if (language.includes('TypeScript')) techs.push('TypeScript');
-  if (content.includes('express') || content.includes('app.get')) techs.push('Express.js');
-  return techs;
+  if (language.includes('JavaScript')) techs.push('JavaScript');
+  if (language.includes('Python')) techs.push('Python');
+  if (language.includes('Java')) techs.push('Java');
+  if (language.includes('C++')) techs.push('C++');
+  if (language.includes('Go')) techs.push('Go');
+  if (language.includes('Rust')) techs.push('Rust');
+  
+  return Array.from(new Set(techs)); // 重複を除去
 };
 
 const extractFunctions = (content: string): string[] => {
@@ -173,6 +241,186 @@ const extractFunctions = (content: string): string[] => {
 const extractClasses = (content: string): string[] => (content.match(/class\s+(\w+)/g) || []).map(m => m.replace('class ', ''));
 const extractImports = (content: string): string[] => (content.match(/import\s+.*from\s+['"]([^'"]+)['"]/g) || []).map(m => m.match(/from\s+['"]([^'"]+)['"]/)?.[1] || '');
 const extractExports = (content: string): string[] => (content.match(/export\s+(default\s+)?(\w+)/g) || []).map(m => m.replace(/export\s+(default\s+)?/, ''));
+
+// --- 技術スタック詳細分析コンポーネント ---
+const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
+  const technologies = detectTechnologies(content, language);
+  
+  const categorizeTechs = () => {
+    const categories = {
+      'フレームワーク': [] as string[],
+      'バックエンド': [] as string[],
+      'フロントエンド': [] as string[],
+      'ライブラリ': [] as string[],
+      'スタイリング': [] as string[],
+      '状態管理': [] as string[],
+      'ランタイム': [] as string[],
+      'ビルドツール': [] as string[],
+      'テスト': [] as string[],
+      'データベース': [] as string[],
+      '言語': [] as string[]
+    };
+    
+    technologies.forEach(tech => {
+      if (['React', 'Vue.js', 'Angular', 'Svelte'].includes(tech)) categories['フレームワーク'].push(tech);
+      else if (['Express.js', 'Fastify', 'Koa.js', 'NestJS', 'Django', 'Flask', 'Spring Boot'].includes(tech)) categories['バックエンド'].push(tech);
+      else if (['React', 'Vue.js', 'Angular', 'Svelte', 'Chart.js', 'D3.js', 'Three.js'].includes(tech)) categories['フロントエンド'].push(tech);
+      else if (['Lodash', 'Axios', 'Fetch API', 'Moment.js', 'date-fns'].includes(tech)) categories['ライブラリ'].push(tech);
+      else if (['Emotion', 'Styled Components', 'Tailwind CSS', 'Bootstrap', 'Material-UI'].includes(tech)) categories['スタイリング'].push(tech);
+      else if (['Redux', 'MobX', 'Zustand', 'Recoil'].includes(tech)) categories['状態管理'].push(tech);
+      else if (['Node.js', 'Deno', 'Bun'].includes(tech)) categories['ランタイム'].push(tech);
+      else if (['Vite', 'Webpack', 'Rollup', 'Parcel'].includes(tech)) categories['ビルドツール'].push(tech);
+      else if (['Jest', 'Mocha', 'Cypress', 'Playwright'].includes(tech)) categories['テスト'].push(tech);
+      else if (['MongoDB', 'MySQL', 'PostgreSQL', 'SQLite', 'Redis'].includes(tech)) categories['データベース'].push(tech);
+      else if (['TypeScript', 'JavaScript', 'Python', 'Java', 'C++', 'Go', 'Rust'].includes(tech)) categories['言語'].push(tech);
+      else {
+        // その他の技術を適切に分類
+        if (tech.includes('CSS') || tech.includes('HTML')) categories['フロントエンド'].push(tech);
+        else categories['ライブラリ'].push(tech);
+      }
+    });
+    
+    return categories;
+  };
+  
+  const categories = categorizeTechs();
+  
+  const getTechDescription = (tech: string): string => {
+    const descriptions: { [key: string]: string } = {
+      'React': 'コンポーネントベースのUIライブラリ。仮想DOMによる高速なレンダリング。',
+      'Vue.js': 'プログレッシブなJavaScriptフレームワーク。学習コストが低く、柔軟性が高い。',
+      'Angular': 'Google開発の完全なフレームワーク。エンタープライズ向けに強い。',
+      'Express.js': 'Node.jsの高速・ミニマルなWebフレームワーク。',
+      'Django': 'Pythonの「バッテリー同梱」Webフレームワーク。',
+      'Flask': 'Pythonの軽量マイクロフレームワーク。',
+      'Node.js': 'サーバーサイドJavaScript実行環境。',
+      'TypeScript': 'JavaScriptに静的型付けを追加した言語。',
+      'Redux': '予測可能な状態コンテナ。',
+      'Tailwind CSS': 'ユーティリティファーストのCSSフレームワーク。',
+      'MongoDB': 'ドキュメント指向のNoSQLデータベース。',
+      'MySQL': '世界で最も人気のあるリレーショナルデータベース。',
+      'Vite': '次世代の高速ビルドツール。',
+      'Webpack': 'JavaScriptモジュールバンドラー。',
+      'Jest': 'JavaScriptテストフレームワーク。'
+    };
+    return descriptions[tech] || `${tech}技術が使用されています。`;
+  };
+  
+  const analyzeArchitecture = () => {
+    const isSPA = ['React', 'Vue.js', 'Angular', 'Svelte'].some(tech => technologies.includes(tech));
+    const isSSR = content.includes('getServerSideProps') || content.includes('getStaticProps') || content.includes('server');
+    const isAPI = content.includes('app.get') || content.includes('app.post') || content.includes('router');
+    const isMicroservice = content.includes('microservice') || content.includes('service') || content.includes('controller');
+    
+    return {
+      architecture: isSPA ? 'SPA (Single Page Application)' : isSSR ? 'SSR (Server Side Rendering)' : 'Multi Page Application',
+      backend: isAPI ? 'REST API' : isMicroservice ? 'Microservices' : 'Monolithic',
+      frontend: isSPA ? 'Component-based' : 'Traditional',
+      dataFlow: categories['状態管理'].length > 0 ? 'State Management' : 'Props/Events'
+    };
+  };
+  
+  const architecture = analyzeArchitecture();
+  
+  if (technologies.length === 0) {
+    return (
+      <div className="tech-stack-analysis" style={{ 
+        backgroundColor: '#f5f5f5', 
+        padding: '16px', 
+        borderRadius: '8px', 
+        marginTop: '16px' 
+      }}>
+        <h3>技術スタック分析</h3>
+        <p>技術が検出されませんでした。</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="tech-stack-analysis" style={{ 
+      backgroundColor: '#f5f5f5', 
+      padding: '16px', 
+      borderRadius: '8px', 
+      marginTop: '16px' 
+    }}>
+      <h3>🔧 技術スタック分析</h3>
+      
+      {/* アーキテクチャ概要 */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>📐 アーキテクチャ</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div style={{ padding: '8px', backgroundColor: 'white', borderRadius: '4px' }}>
+            <strong>種類:</strong> {architecture.architecture}
+          </div>
+          <div style={{ padding: '8px', backgroundColor: 'white', borderRadius: '4px' }}>
+            <strong>バックエンド:</strong> {architecture.backend}
+          </div>
+          <div style={{ padding: '8px', backgroundColor: 'white', borderRadius: '4px' }}>
+            <strong>フロントエンド:</strong> {architecture.frontend}
+          </div>
+          <div style={{ padding: '8px', backgroundColor: 'white', borderRadius: '4px' }}>
+            <strong>データフロー:</strong> {architecture.dataFlow}
+          </div>
+        </div>
+      </div>
+      
+      {/* 技術カテゴリ */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>🛠️ 技術カテゴリ</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+          {Object.entries(categories).map(([category, techs]) => (
+            techs.length > 0 && (
+              <div key={category} style={{ 
+                backgroundColor: 'white', 
+                padding: '12px', 
+                borderRadius: '4px',
+                border: '1px solid #e0e0e0'
+              }}>
+                <h5 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>{category}</h5>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {techs.map(tech => (
+                    <span 
+                      key={tech}
+                      style={{ 
+                        backgroundColor: '#f0f0f0', 
+                        padding: '4px 8px', 
+                        borderRadius: '12px', 
+                        fontSize: '12px',
+                        border: '1px solid #d0d0d0'
+                      }}
+                      >
+                        {tech}
+                      </span>
+                  ))}
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      </div>
+      
+      {/* 技術詳細 */}
+      <div>
+        <h4>📖 技術詳細</h4>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {technologies.map(tech => (
+            <div key={tech} style={{ 
+              backgroundColor: 'white', 
+              padding: '12px', 
+              borderRadius: '4px',
+              border: '1px solid #e0e0e0'
+            }}>
+              <h6 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>{tech}</h6>
+              <p style={{ margin: 0, fontSize: '14px', lineHeight: '1.4' }}>
+                {getTechDescription(tech)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Sub-components ---
 
@@ -458,6 +706,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AnalysisHistory[]>([]);
+  const [fileContent, setFileContent] = useState<string>('');
 
   const SUPPORTED_EXTENSIONS = [
     '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.xml', '.php', '.py', '.java',
@@ -571,6 +820,7 @@ function App() {
         });
       } else {
         const content = await selectedFile.text();
+        setFileContent(content);
         const lang = detectLanguage(selectedFile.name);
         setAnalysisResult({
           type: 'single', fileName: selectedFile.name, language: lang, technologies: detectTechnologies(content, lang),
@@ -682,6 +932,14 @@ function App() {
                   <h3>検出された技術</h3>
                   <div className="tech-tags">{analysisResult.technologies.map((t, i) => <span key={i} className="tech-tag">{t}</span>)}</div>
                 </div>
+              )}
+
+              {/* 技術スタック詳細分析 */}
+              {analysisResult.type === 'single' && fileContent && (
+                <TechStackAnalysis 
+                  content={fileContent} 
+                  language={analysisResult.language || ''} 
+                />
               )}
 
               {analysisResult.structure && <StructureStats structure={analysisResult.structure} />}
