@@ -884,7 +884,7 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
                   padding: '2px 4px',
                   borderRadius: '3px'
                 }}>
-                  信頼度: {aiLevel.confidence}%
+                  統計的推定
                 </span>
               </div>
               
@@ -1004,8 +1004,16 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
         lineHeight: '1.4'
       }}>
         <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTechs.slice(0, 3).join('・')}を使用した{scale.totalFiles}ファイルのプロジェクトです。
-        {riskLevel.level === 'HIGH' && ' リスクが高いため注意が必要です。'}
-        {aiLevel.level === 'HIGH' && ' AI生成コードが含まれている可能性があります。'}
+        {(() => {
+          if (riskLevel.level === 'HIGH') {
+            return '一部のファイルで複雑化が進んでおり、リファクタリングが必要です。';
+          } else if (riskLevel.level === 'MEDIUM') {
+            return '全体的に健全ですが、一部改善の余地があります。';
+          } else {
+            return 'プロジェクトは良好な状態で、現在の品質を維持してください。';
+          }
+        })()}
+        {aiLevel.level === 'HIGH' && ' AI生成コードの可能性があるため、詳細な確認が必要です。'}
         {reasons.length > 0 && (
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
             <strong>判定理由:</strong> {reasons.join('・')}
@@ -2506,6 +2514,17 @@ const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
+// --- 統一リスクレベル判定関数 ---
+export const getRiskLevel = (score: number): { level: 'LOW' | 'MEDIUM' | 'HIGH', color: string, icon: string } => {
+  if (score >= 70) {
+    return { level: 'HIGH', color: '#dc2626', icon: '🔴' };
+  } else if (score >= 40) {
+    return { level: 'MEDIUM', color: '#f59e0b', icon: '🟡' };
+  } else {
+    return { level: 'LOW', color: '#10b981', icon: '🟢' };
+  }
+};
+
 // --- ブラックボックス指数（BBI）型定義 ---
 interface BlackBoxIndex {
   score: number;
@@ -3659,11 +3678,74 @@ const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnaly
   );
 };
 
-const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => (
-  <div className="important-files">
-    <h3>主要ファイル</h3>
-    <div className="files-grid">
-      {files.sort((a, b) => b.size - a.size).slice(0, 10).map((file, i) => (
+const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => {
+  const [sortBy, setSortBy] = useState<'risk' | 'size' | 'lines'>('risk');
+  
+  const getSortedFiles = () => {
+    const sorted = [...files];
+    switch (sortBy) {
+      case 'risk':
+        return sorted.sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
+      case 'size':
+        return sorted.sort((a, b) => b.size - a.size);
+      case 'lines':
+        return sorted.sort((a, b) => b.lines - a.lines);
+      default:
+        return sorted;
+    }
+  };
+
+  return (
+    <div className="important-files">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h3 style={{ margin: 0 }}>主要ファイル</h3>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setSortBy('risk')}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              border: `1px solid ${sortBy === 'risk' ? '#1890ff' : '#d9d9d9'}`,
+              backgroundColor: sortBy === 'risk' ? '#1890ff' : '#fff',
+              color: sortBy === 'risk' ? '#fff' : '#666',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            🔴 リスク順
+          </button>
+          <button
+            onClick={() => setSortBy('size')}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              border: `1px solid ${sortBy === 'size' ? '#1890ff' : '#d9d9d9'}`,
+              backgroundColor: sortBy === 'size' ? '#1890ff' : '#fff',
+              color: sortBy === 'size' ? '#fff' : '#666',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            📦 サイズ順
+          </button>
+          <button
+            onClick={() => setSortBy('lines')}
+            style={{
+              padding: '4px 8px',
+              fontSize: '12px',
+              border: `1px solid ${sortBy === 'lines' ? '#1890ff' : '#d9d9d9'}`,
+              backgroundColor: sortBy === 'lines' ? '#1890ff' : '#fff',
+              color: sortBy === 'lines' ? '#fff' : '#666',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            📝 行数順
+          </button>
+        </div>
+      </div>
+      <div className="files-grid">
+        {getSortedFiles().slice(0, 10).map((file, i) => (
         <div key={i} className="file-card" onClick={() => onSelect(file)} style={{ cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <h4 style={{ margin: 0, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{file.fileName}</h4>
@@ -4258,24 +4340,27 @@ function App() {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px'
                 }}>
-                  {/* BBIカード */}
+                  {/* 統合リスクカード */}
                   {(() => {
                     const bbi = calculateBlackBoxIndex(analysisResult);
                     if (!bbi) return null;
                     const { level, color } = getBBILevel(bbi.score);
+                    const aiLikelihood = analysisResult.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
+                    
                     return (
                       <div style={{
-                        backgroundColor: 'white',
-                        border: `1px solid ${color}`,
-                        borderRadius: '6px',
-                        padding: '10px',
+                        backgroundColor: '#fff7e6',
+                        border: `1px solid #fbbf24`,
+                        borderRadius: '8px',
+                        padding: '16px',
                         textAlign: 'center',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         position: 'relative'
                       }}
                       onClick={() => {
-                        alert(`ブラックボックス指数 詳細情報:\n\nスコア: ${bbi.score}\nレベル: ${level === 'CRITICAL' ? 'クリティカル' : level === 'WARNING' ? '警告' : '健全'}\n\n解釈:\n${bbi.interpretation.join('\n')}\n\n推奨アクション:\n${level === 'CRITICAL' ? '即時対応が必要です' : level === 'WARNING' ? '監視と改善が必要です' : '現状維持で問題ありません'}`);
+                        alert(`プロジェクトリスク詳細:\n\nスコア: ${bbi.score}\n状態: ${level === 'CRITICAL' ? '複雑化が進んでいます' : level === 'WARNING' ? '一部改善が必要です' : '健全な状態です'}\n\n最も影響している要因: ${bbi.contributions && Object.entries(bbi.contributions)
+                          .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[1]?.description || '平均リスク'}`);
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -4286,20 +4371,60 @@ function App() {
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>ブラックボックス指数</div>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
+                      <div style={{ fontSize: '12px', color: '#595959', marginBottom: '8px', fontWeight: '500' }}>
+                        🎯 プロジェクトリスク概要
+                      </div>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#d97706', marginBottom: '8px' }}>
                         {bbi.score}
                       </div>
-                      <div style={{ fontSize: '10px', color, fontWeight: 'bold', marginBottom: '4px' }}>
-                        {level === 'CRITICAL' ? '🔴 要対応' : level === 'WARNING' ? '⚠️ 要注意' : '✅ 健全'}
+                      <div style={{ 
+                        fontSize: '12px', 
+                        fontWeight: '600', 
+                        backgroundColor: '#d97706',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        marginBottom: '8px',
+                        display: 'inline-block'
+                      }}>
+                        {(() => {
+                          if (bbi.score >= 70) return '🔴 高リスク';
+                          if (bbi.score >= 40) return '🟡 要注意';
+                          return '🟢 健全';
+                        })()}
                       </div>
-                      <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                        {bbi.interpretation[0] || '主な問題: 高リスクファイル集中'}
+                      
+                      <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.4', marginBottom: '8px' }}>
+                        {(() => {
+                          if (bbi.score >= 70) return '🔴 複雑化が進んでいます。リファクタリングを優先してください。';
+                          if (bbi.score >= 40) return '🟡 一部改善が必要です。高リスクファイルから確認してください。';
+                          return '🟢 プロジェクトは健全な状態です。現在の品質を維持してください。';
+                        })()}
                       </div>
+                      
+                      <div style={{ fontSize: '10px', color: '#666', lineHeight: '1.2' }}>
+                        💡 最も影響している要因: {bbi.contributions && Object.entries(bbi.contributions)
+                          .sort((a, b) => b[1].contribution - a[1].contribution)[0]?.[1]?.description || '平均リスク'}
+                      </div>
+                      
+                      {aiLikelihood >= 70 && (
+                        <div style={{ 
+                          fontSize: '9px', 
+                          color: '#d97706', 
+                          marginTop: '8px',
+                          backgroundColor: '#fef3c7',
+                          border: '1px solid #fbbf24',
+                          borderRadius: '4px',
+                          padding: '4px'
+                        }}>
+                          ⚠️ AI生成コードの可能性があります
+                        </div>
+                      )}
+                      
                       <div style={{ 
                         position: 'absolute', 
-                        top: '4px', 
-                        right: '4px', 
+                        top: '8px', 
+                        right: '8px', 
                         fontSize: '10px', 
                         color: '#999',
                         opacity: 0.7
@@ -4307,7 +4432,7 @@ function App() {
                         🔍
                       </div>
                     </div>
-                    );
+                  );
                   })()}
                   
                   {/* Health Scoreカード */}
