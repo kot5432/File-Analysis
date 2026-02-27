@@ -1738,7 +1738,7 @@ const getRiskLevel = (score: number): 'low' | 'medium' | 'high' => {
 };
 
 // --- ヒートマップ表示コンポーネント（Fix提案付き）---
-const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult; onSelect: (file: FileAnalysis) => void }> = ({ analysis, onSelect }) => {
   const fileRisks = generateFileRisksWithFixes(analysis);
   
   if (fileRisks.length === 0) {
@@ -2257,7 +2257,7 @@ const generateRefactorRanking = (analysis: AnalysisResult): RefactorPriority[] =
 };
 
 // --- リファクタ優先度表示コンポーネント ---
-const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult; onSelect: (file: FileAnalysis) => void }> = ({ analysis, onSelect }) => {
   const ranking = generateRefactorRanking(analysis);
   
   if (ranking.length === 0) {
@@ -2277,13 +2277,12 @@ const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analys
   
   // ファイルクリックハンドラ
   const handleFileClick = (filePath: string) => {
-    const fileElement = document.querySelector(`[data-file-path="${filePath}"]`);
-    if (fileElement) {
-      fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
-      setTimeout(() => {
-        (fileElement as HTMLElement).style.backgroundColor = '';
-      }, 2000);
+    // ファイル詳細画面に遷移
+    if (analysis && analysis.files) {
+      const targetFile = analysis.files.find(file => file.fileName === filePath);
+      if (targetFile) {
+        onSelect(targetFile);
+      }
     }
   };
   
@@ -4410,7 +4409,7 @@ function App() {
                   <ImprovementSuggestions analysis={analysisResult} />
 
                   {/* リスクヒートマップ */}
-                  <RiskHeatmapWithFixes analysis={analysisResult} />
+                  <RiskHeatmapWithFixes analysis={analysisResult} onSelect={setSelectedFileInZip} />
 
                   {/* ファイル詳細 */}
                   {selectedFileInZip && (
