@@ -35,7 +35,18 @@ interface BlackboxRisk {
   commentRatio?: { commentRatio: number; riskScore: number; commentLines: number; totalLines: number };
   fileSize?: { lineCount: number; riskScore: number };
   unusedFunctions?: { unusedFunctions: string[]; count: number; riskScore: number };
-  aiEstimation?: { aiLikelihood: number; level: 'LOW' | 'MEDIUM' | 'HIGH'; reasons: string[] };
+  aiEstimation?: { 
+    aiLikelihood: number; 
+    level: 'LOW' | 'MEDIUM' | 'HIGH'; 
+    reasons: string[];
+    // 新規：AI判定の詳細情報
+    commentRate?: number;
+    avgFunctionLength?: number;
+    complexityScore?: number;
+    namingConsistency?: number;
+    importPattern?: string;
+    errorHandling?: number;
+  };
 }
 
 interface FileAnalysis {
@@ -662,9 +673,44 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
 
   const getAILevel = () => {
     const aiLikelihood = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
-    if (aiLikelihood >= 70) return { level: 'HIGH', color: '#ff4d4f', bgColor: '#fff2f0', borderColor: '#ffccc7' };
-    if (aiLikelihood >= 40) return { level: 'MEDIUM', color: '#faad14', bgColor: '#fffbe6', borderColor: '#ffe58f' };
-    return { level: 'LOW', color: '#52c41a', bgColor: '#f6ffed', borderColor: '#b7eb8f' };
+    const level = aiLikelihood >= 70 ? 'HIGH' : aiLikelihood >= 40 ? 'MEDIUM' : 'LOW';
+    const color = aiLikelihood >= 70 ? '#ff4d4f' : aiLikelihood >= 40 ? '#faad14' : '#52c41a';
+    const bgColor = aiLikelihood >= 70 ? '#fff2f0' : aiLikelihood >= 40 ? '#fffbe6' : '#f6ffed';
+    const borderColor = aiLikelihood >= 70 ? '#ffccc7' : aiLikelihood >= 40 ? '#ffe58f' : '#b7eb8f';
+    
+    // AI判定根拠の収集
+    const evidence: string[] = [];
+    const aiEstimation = result.blackboxRisk?.aiEstimation;
+    
+    if (aiEstimation) {
+      if (aiEstimation.commentRate !== undefined && aiEstimation.commentRate < 0.05) {
+        evidence.push(`コメント率が低い (${Math.round(aiEstimation.commentRate * 100)}%)`);
+      }
+      if (aiEstimation.avgFunctionLength !== undefined && aiEstimation.avgFunctionLength > 50) {
+        evidence.push(`関数が長い (平均${Math.round(aiEstimation.avgFunctionLength)}行)`);
+      }
+      if (aiEstimation.complexityScore !== undefined && aiEstimation.complexityScore > 70) {
+        evidence.push(`複雑度が高い (${Math.round(aiEstimation.complexityScore)}/100)`);
+      }
+      if (aiEstimation.namingConsistency !== undefined && aiEstimation.namingConsistency < 0.7) {
+        evidence.push(`命名規則が一貫性がない (${Math.round(aiEstimation.namingConsistency * 100)}%)`);
+      }
+      if (aiEstimation.importPattern !== undefined && aiEstimation.importPattern === 'uniform') {
+        evidence.push('インポートパターンが均一');
+      }
+      if (aiEstimation.errorHandling !== undefined && aiEstimation.errorHandling < 0.3) {
+        evidence.push(`エラーハンドリングが少ない (${Math.round(aiEstimation.errorHandling * 100)}%)`);
+      }
+    }
+    
+    return { 
+      level, 
+      color, 
+      bgColor, 
+      borderColor,
+      evidence: evidence.length > 0 ? evidence : ['AI生成の可能性を検出'],
+      confidence: Math.round(aiLikelihood)
+    };
   };
 
   const getMainTechnologies = () => {
@@ -831,7 +877,33 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
                 }}>
                   {aiLevel.level}
                 </span>
+                <span style={{
+                  fontSize: '10px',
+                  color: '#666',
+                  backgroundColor: '#f0f0f0',
+                  padding: '2px 4px',
+                  borderRadius: '3px'
+                }}>
+                  信頼度: {aiLevel.confidence}%
+                </span>
               </div>
+              
+              {/* AI判定根拠 */}
+              <div style={{ 
+                fontSize: '10px', 
+                color: '#666', 
+                marginTop: '6px',
+                backgroundColor: '#fafafa',
+                border: '1px solid #e0e0e0',
+                borderRadius: '4px',
+                padding: '6px'
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>🔍 検出根拠:</div>
+                {aiLevel.evidence.map((evidence, index) => (
+                  <div key={index} style={{ marginBottom: '1px' }}>• {evidence}</div>
+                ))}
+              </div>
+              
               <div style={{ fontSize: '10px', color: '#8c8c8c', marginTop: '4px' }}>
                 ※ This is heuristic estimation, not definitive AI detection.
               </div>
@@ -3015,6 +3087,39 @@ interface BlackBoxIndex {
     lowCommentRatio: number;
     aiSuspiciousRatio: number;
   };
+  // 新規：寄与度情報
+  contributions: {
+    avgRisk: {
+      value: number;
+      weight: number;
+      contribution: number;
+      description: string;
+    };
+    highRiskRatio: {
+      value: number;
+      weight: number;
+      contribution: number;
+      description: string;
+    };
+    avgNestingDepth: {
+      value: number;
+      weight: number;
+      contribution: number;
+      description: string;
+    };
+    lowCommentRatio: {
+      value: number;
+      weight: number;
+      contribution: number;
+      description: string;
+    };
+    aiSuspiciousRatio: {
+      value: number;
+      weight: number;
+      contribution: number;
+      description: string;
+    };
+  };
   interpretation: string[];
 }
 
@@ -3115,6 +3220,39 @@ const calculateBlackBoxIndex = (analysis: AnalysisResult): BlackBoxIndex | null 
       lowCommentRatio: Math.round(lowCommentNormalized),
       aiSuspiciousRatio: Math.round(aiSuspiciousNormalized)
     },
+    // 新規：寄与度情報
+    contributions: {
+      avgRisk: {
+        value: Math.round(avgRiskNormalized),
+        weight: 35,
+        contribution: Math.round(0.35 * avgRiskNormalized),
+        description: '平均リスクスコア'
+      },
+      highRiskRatio: {
+        value: Math.round(highRiskNormalized),
+        weight: 25,
+        contribution: Math.round(0.25 * highRiskNormalized),
+        description: '高リスクファイル率'
+      },
+      avgNestingDepth: {
+        value: Math.round(avgNestingNormalized),
+        weight: 15,
+        contribution: Math.round(0.15 * avgNestingNormalized),
+        description: '平均ネスト深度'
+      },
+      lowCommentRatio: {
+        value: Math.round(lowCommentNormalized),
+        weight: 15,
+        contribution: Math.round(0.15 * lowCommentNormalized),
+        description: 'コメント不足率'
+      },
+      aiSuspiciousRatio: {
+        value: Math.round(aiSuspiciousNormalized),
+        weight: 10,
+        contribution: Math.round(0.10 * aiSuspiciousNormalized),
+        description: 'AI生成疑い率'
+      }
+    },
     interpretation
   };
 };
@@ -3136,6 +3274,8 @@ interface ImprovementAction {
   estimatedEffort: 'small' | 'medium' | 'large';
   why?: string; // 教育モード用
   filePath?: string;
+  estimatedHours?: number; // 想定工数
+  reference?: string; // 参考資料
 }
 
 interface ProjectActionPlan {
@@ -3197,6 +3337,8 @@ const generateActionRules = (): Array<{
           priority: 'high',
           category: 'documentation',
           estimatedEffort: 'medium',
+          estimatedHours: 2,
+          reference: 'https://jsdoc.app/',
           why: 'Documentation helps other developers understand API contracts'
         },
         {
@@ -3205,6 +3347,8 @@ const generateActionRules = (): Array<{
           priority: 'medium',
           category: 'documentation',
           estimatedEffort: 'medium',
+          estimatedHours: 1.5,
+          reference: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Comments',
           why: 'Comments explain the intent behind complex business logic'
         },
         {
@@ -3213,6 +3357,8 @@ const generateActionRules = (): Array<{
           priority: 'low',
           category: 'documentation',
           estimatedEffort: 'small',
+          estimatedHours: 0.5,
+          reference: 'https://www.makeareadme.com/',
           why: 'Good documentation improves project maintainability'
         }
       ]
@@ -4364,7 +4510,7 @@ function App() {
     }));
   };
 
-  // --- 次の最適アクション計算 ---
+  // --- 次の最適アクション計算（強化版）---
   interface NextBestAction {
     action: string;
     file: string;
@@ -4372,6 +4518,18 @@ function App() {
     effort: 'SMALL' | 'MEDIUM' | 'LARGE';
     category: string;
     targetElement?: string;
+    // 新規：根拠と実行導線
+    rationale: {
+      why: string;           // なぜ最優先か
+      evidence: string[];    // 根拠データ
+      confidence: number;     // 信頼度 0-100
+      estimatedHours: number; // 想定工数
+    };
+    nextSteps: {
+      immediate: string;     // 即時アクション
+      followUp: string;      // 次のステップ
+      resources: string[];   // 参考リソース
+    };
   }
 
   const getNextBestAction = (analysis: AnalysisResult): NextBestAction | null => {
@@ -4390,7 +4548,18 @@ function App() {
         file: 'Project',
         impact: 'LOW',
         effort: 'SMALL',
-        category: 'health'
+        category: 'health',
+        rationale: {
+          why: 'プロジェクトの健全性が高く、緊急の対応は不要',
+          evidence: [`健全性スコア: ${health.score}/100`, `BBI: ${bbi.score}/100`],
+          confidence: 95,
+          estimatedHours: 0
+        },
+        nextSteps: {
+          immediate: '現状維持',
+          followUp: '定期的なモニタリングを推奨',
+          resources: []
+        }
       };
     }
     
@@ -4407,7 +4576,18 @@ function App() {
         impact: 'HIGH',
         effort: topCritical.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
         category: topCritical.category,
-        targetElement: topCritical.filePath
+        targetElement: topCritical.filePath,
+        rationale: {
+          why: 'クリティカルな問題が検出され、即時対応が必要',
+          evidence: [topCritical.description, `カテゴリ: ${topCritical.category}`],
+          confidence: 100,
+          estimatedHours: topCritical.estimatedHours || 4
+        },
+        nextSteps: {
+          immediate: 'クリティカル問題の修正を開始',
+          followUp: '修正後のテストとレビューを実施',
+          resources: topCritical.reference ? [topCritical.reference] : []
+        }
       };
     }
     
@@ -4420,7 +4600,18 @@ function App() {
         impact: 'HIGH',
         effort: topHigh.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
         category: topHigh.category,
-        targetElement: topHigh.filePath
+        targetElement: topHigh.filePath,
+        rationale: {
+          why: '高優先度の問題が検出され、早期対応を推奨',
+          evidence: [topHigh.description, `カテゴリ: ${topHigh.category}`],
+          confidence: 85,
+          estimatedHours: topHigh.estimatedHours || 2
+        },
+        nextSteps: {
+          immediate: '高優先度問題の修正を計画',
+          followUp: '修正後の影響範囲を確認',
+          resources: topHigh.reference ? [topHigh.reference] : []
+        }
       };
     }
     
@@ -4433,7 +4624,18 @@ function App() {
         impact: 'MEDIUM',
         effort: topMedium.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
         category: topMedium.category,
-        targetElement: topMedium.filePath
+        targetElement: topMedium.filePath,
+        rationale: {
+          why: '中優先度の改善項目が検出され、余裕がある際に対応',
+          evidence: [topMedium.description, `カテゴリ: ${topMedium.category}`],
+          confidence: 70,
+          estimatedHours: topMedium.estimatedHours || 1
+        },
+        nextSteps: {
+          immediate: '改善項目のリストアップ',
+          followUp: '次のスプリントで計画に組み込み',
+          resources: topMedium.reference ? [topMedium.reference] : []
+        }
       };
     }
     
@@ -4446,7 +4648,18 @@ function App() {
         impact: topPriority.priorityScore >= 80 ? 'HIGH' : topPriority.priorityScore >= 60 ? 'MEDIUM' : 'LOW',
         effort: 'MEDIUM',
         category: 'structure',
-        targetElement: topPriority.path
+        targetElement: topPriority.path,
+        rationale: {
+          why: 'コード複雑度を削減することで、保守性と可読性が向上',
+          evidence: [`優先度スコア: ${topPriority.priorityScore}/100`, `ファイル: ${topPriority.path}`],
+          confidence: 60,
+          estimatedHours: 3
+        },
+        nextSteps: {
+          immediate: '複雑度の高い箇所を特定',
+          followUp: 'リファクタリングを実施',
+          resources: []
+        }
       };
     }
     
@@ -4509,28 +4722,15 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
       backgroundColor: '#e0f2fe',
       border: '1px solid #0ea5e9',
       borderRadius: '8px',
-      padding: '12px 16px',
+      padding: '16px',
       marginBottom: '16px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
       boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
     }}>
-      <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#0c4a6e' }}>
-        👉 Next Best Action:
-      </span>
-      
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '13px', color: '#075985', fontWeight: '500' }}>
-          <strong>{nextAction.action}</strong>
+      {/* ヘッダー */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#0c4a6e' }}>
+          👉 Next Best Action:
         </span>
-        
-        {nextAction.file !== 'Project' && (
-          <span style={{ fontSize: '12px', color: '#0284c7', backgroundColor: '#f0f9ff', padding: '2px 6px', borderRadius: '4px' }}>
-            {nextAction.file.split('/').pop()}
-          </span>
-        )}
-        
         <span style={{
           backgroundColor: impactColor.bg,
           color: impactColor.color,
@@ -4542,7 +4742,6 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
         }}>
           {nextAction.impact}
         </span>
-        
         <span style={{
           backgroundColor: '#f1f5f9',
           color: '#475569',
@@ -4552,29 +4751,95 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
         }}>
           {nextAction.effort}
         </span>
+        <span style={{
+          backgroundColor: nextAction.rationale.confidence >= 80 ? '#dcfce7' : 
+                         nextAction.rationale.confidence >= 60 ? '#fef3c7' : '#fee2e2',
+          color: nextAction.rationale.confidence >= 80 ? '#166534' : 
+                nextAction.rationale.confidence >= 60 ? '#713f12' : '#991b1b',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '10px'
+        }}>
+          信頼度: {nextAction.rationale.confidence}%
+        </span>
+        {nextAction.rationale.estimatedHours > 0 && (
+          <span style={{
+            backgroundColor: '#f3f4f6',
+            color: '#374151',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px'
+          }}>
+            ⏱️ {nextAction.rationale.estimatedHours}h
+          </span>
+        )}
       </div>
-      
-      {nextAction.targetElement && (
-        <button
-          onClick={handleViewDetails}
-          style={{
-            backgroundColor: '#0ea5e9',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '6px 12px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0284c7'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0ea5e9'}
-        >
-          View Details
-        </button>
-      )}
+
+      {/* アクション内容 */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '15px', color: '#075985', fontWeight: '600', marginBottom: '4px' }}>
+          {nextAction.action}
+        </div>
+        {nextAction.file !== 'Project' && (
+          <div style={{ fontSize: '12px', color: '#0284c7', backgroundColor: '#f0f9ff', padding: '2px 6px', borderRadius: '4px', display: 'inline-block' }}>
+            📁 {nextAction.file.split('/').pop()}
+          </div>
+        )}
+      </div>
+
+      {/* 根拠説明 */}
+      <div style={{
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '6px',
+        padding: '10px',
+        marginBottom: '12px'
+      }}>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', marginBottom: '4px' }}>
+          🎯 なぜこれが最優先か：
+        </div>
+        <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>
+          {nextAction.rationale.why}
+        </div>
+        <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+          根拠: {nextAction.rationale.evidence.join(', ')}
+        </div>
+      </div>
+
+      {/* 実行導線 */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        {nextAction.targetElement && (
+          <button
+            onClick={handleViewDetails}
+            style={{
+              backgroundColor: '#0ea5e9',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 12px',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0284c7'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0ea5e9'}
+          >
+            📍 ファイルを確認
+          </button>
+        )}
+        
+        <div style={{ fontSize: '10px', color: '#64748b' }}>
+          💡 {nextAction.nextSteps.immediate}
+        </div>
+        
+        {nextAction.nextSteps.resources.length > 0 && (
+          <div style={{ fontSize: '10px', color: '#0ea5e9', cursor: 'pointer' }}>
+            📚 参考資料 ({nextAction.nextSteps.resources.length})
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -4829,9 +5094,22 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {bbi.score}
                         </div>
-                        <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
+                        <div style={{ fontSize: '11px', color, fontWeight: 'bold', marginBottom: '8px' }}>
                           {level}
                         </div>
+                        
+                        {/* 寄与度内訳 */}
+                        <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+                          内訳 (上位3要素):
+                        </div>
+                        {Object.entries(bbi.contributions)
+                          .sort(([, a], [, b]) => b.contribution - a.contribution)
+                          .slice(0, 3)
+                          .map(([key, contrib]) => (
+                            <div key={key} style={{ fontSize: '9px', color: '#888', marginBottom: '2px' }}>
+                              {contrib.description}: +{contrib.contribution}点 ({contrib.weight}%)
+                            </div>
+                          ))}
                       </div>
                     );
                   })()}
