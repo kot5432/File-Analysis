@@ -4765,33 +4765,242 @@ function App() {
   };
 
   // --- 次の最適アクション計算 ---
-  const getNextBestAction = (analysis: AnalysisResult): { action: string; impact: string; file: string } => {
-    const actionPlan = generateProjectActionPlan(analysis);
-    const priorities = generateRefactorRanking(analysis);
+  interface NextBestAction {
+    action: string;
+    file: string;
+    impact: 'HIGH' | 'MEDIUM' | 'LOW';
+    effort: 'SMALL' | 'MEDIUM' | 'LARGE';
+    category: string;
+    targetElement?: string;
+  }
+
+  const getNextBestAction = (analysis: AnalysisResult): NextBestAction | null => {
+    if (!analysis || analysis.type !== 'zip' || !analysis.files) {
+      return null;
+    }
     
-    if (actionPlan.critical.length > 0) {
-      const topCritical = actionPlan.critical[0];
+    // プロジェクト健全性チェック
+    const health = calculateProjectHealthScore(analysis);
+    const bbi = calculateBlackBoxIndex(analysis);
+    
+    // ケース①：問題なし
+    if (health && health.score >= 80 && bbi && bbi.score < 40) {
       return {
-        action: topCritical.title,
-        impact: 'Critical',
-        file: topCritical.filePath || 'Unknown'
+        action: 'No critical issues detected',
+        file: 'Project',
+        impact: 'LOW',
+        effort: 'SMALL',
+        category: 'health'
       };
     }
     
+    // アクションプランと優先度を取得
+    const actionPlan = generateProjectActionPlan(analysis);
+    const priorities = generateRefactorRanking(analysis);
+    
+    // Critical priority の最上位
+    if (actionPlan.critical.length > 0) {
+      const topCritical = actionPlan.critical[0];
+      return {
+        action: generateActionText(topCritical),
+        file: topCritical.filePath || 'Unknown',
+        impact: 'HIGH',
+        effort: topCritical.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
+        category: topCritical.category,
+        targetElement: topCritical.filePath
+      };
+    }
+    
+    // High priority の最上位
+    if (actionPlan.high.length > 0) {
+      const topHigh = actionPlan.high[0];
+      return {
+        action: generateActionText(topHigh),
+        file: topHigh.filePath || 'Unknown',
+        impact: 'HIGH',
+        effort: topHigh.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
+        category: topHigh.category,
+        targetElement: topHigh.filePath
+      };
+    }
+    
+    // Medium priority の最上位
+    if (actionPlan.medium.length > 0) {
+      const topMedium = actionPlan.medium[0];
+      return {
+        action: generateActionText(topMedium),
+        file: topMedium.filePath || 'Unknown',
+        impact: 'MEDIUM',
+        effort: topMedium.estimatedEffort.toUpperCase() as 'SMALL' | 'MEDIUM' | 'LARGE',
+        category: topMedium.category,
+        targetElement: topMedium.filePath
+      };
+    }
+    
+    // 優先度ランキングからフォールバック
     if (priorities.length > 0) {
       const topPriority = priorities[0];
       return {
         action: 'Reduce complexity',
-        impact: 'High',
-        file: topPriority.path
+        file: topPriority.path,
+        impact: topPriority.priorityScore >= 80 ? 'HIGH' : topPriority.priorityScore >= 60 ? 'MEDIUM' : 'LOW',
+        effort: 'MEDIUM',
+        category: 'structure',
+        targetElement: topPriority.path
       };
     }
     
-    return {
-      action: 'Review documentation',
-      impact: 'Medium',
-      file: 'README.md'
+    return null;
+  };
+
+  // --- Next Best Action ウィジェットコンポーネント ---
+const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const nextAction = getNextBestAction(analysis);
+  
+  if (!nextAction) {
+    return (
+      <div style={{
+        backgroundColor: '#f3f4f6',
+        border: '1px solid #d1d5db',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#6b7280' }}>
+          👉 Next Best Action:
+        </span>
+        <span style={{ fontSize: '13px', color: '#6b7280' }}>
+          — No actions available —
+        </span>
+      </div>
+    );
+  }
+  
+  // Impact バッジの色
+  const impactColors = {
+    HIGH: { bg: '#fee2e2', color: '#991b1b', border: '#ef4444' },
+    MEDIUM: { bg: '#fef3c7', color: '#713f12', border: '#eab308' },
+    LOW: { bg: '#dcfce7', color: '#166534', border: '#22c55e' }
+  };
+  
+  const impactColor = impactColors[nextAction.impact];
+  
+  // View Details クリックハンドラ
+  const handleViewDetails = () => {
+    if (nextAction.targetElement) {
+      // 対象ファイルの詳細へスクロール
+      const fileElement = document.querySelector(`[data-file-path="${nextAction.targetElement}"]`);
+      if (fileElement) {
+        fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // ハイライト効果
+        (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
+        setTimeout(() => {
+          (fileElement as HTMLElement).style.backgroundColor = '';
+        }, 2000);
+      }
+    }
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#e0f2fe',
+      border: '1px solid #0ea5e9',
+      borderRadius: '8px',
+      padding: '12px 16px',
+      marginBottom: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+    }}>
+      <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#0c4a6e' }}>
+        👉 Next Best Action:
+      </span>
+      
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '13px', color: '#075985', fontWeight: '500' }}>
+          <strong>{nextAction.action}</strong>
+        </span>
+        
+        {nextAction.file !== 'Project' && (
+          <span style={{ fontSize: '12px', color: '#0284c7', backgroundColor: '#f0f9ff', padding: '2px 6px', borderRadius: '4px' }}>
+            {nextAction.file.split('/').pop()}
+          </span>
+        )}
+        
+        <span style={{
+          backgroundColor: impactColor.bg,
+          color: impactColor.color,
+          border: `1px solid ${impactColor.border}`,
+          padding: '2px 6px',
+          borderRadius: '8px',
+          fontSize: '10px',
+          fontWeight: 'bold'
+        }}>
+          {nextAction.impact}
+        </span>
+        
+        <span style={{
+          backgroundColor: '#f1f5f9',
+          color: '#475569',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '10px'
+        }}>
+          {nextAction.effort}
+        </span>
+      </div>
+      
+      {nextAction.targetElement && (
+        <button
+          onClick={handleViewDetails}
+          style={{
+            backgroundColor: '#0ea5e9',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '6px 12px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            whiteSpace: 'nowrap'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0284c7'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0ea5e9'}
+        >
+          View Details
+        </button>
+      )}
+    </div>
+  );
+};
+
+  const generateActionText = (action: ImprovementAction): string => {
+    const actionMap: { [key: string]: string } = {
+      '関数分割を検討': 'Split large functions',
+      'early return を使う': 'Use early returns',
+      'ガード節を導入': 'Add guard clauses',
+      '公開関数に説明追加': 'Document public functions',
+      '複雑ロジックにコメント': 'Add comments to complex logic',
+      'README補足': 'Update documentation',
+      'ファイル分割': 'Split large file',
+      '責務分離': 'Separate responsibilities',
+      'モジュール化': 'Modularize code',
+      '未使用関数削除': 'Remove unused functions',
+      'tree-shaking確認': 'Check tree shaking',
+      'export見直し': 'Review exports',
+      '手動レビュー推奨': 'Review AI-generated code',
+      'エッジケース確認': 'Check edge cases',
+      'テスト追加': 'Add comprehensive tests',
+      'コードスタイル統一': 'Standardize code style',
+      '変数名改善': 'Improve variable names'
     };
+    
+    return actionMap[action.title] || action.title;
   };
 
   const SUPPORTED_EXTENSIONS = [
@@ -4967,41 +5176,8 @@ function App() {
 
         {analysisResult && (
           <div className="analysis-result">
-            {/* 次の最適アクション（固定表示） */}
-            {(() => {
-              const nextAction = getNextBestAction(analysisResult);
-              return (
-                <div style={{
-                  backgroundColor: '#e0f2fe',
-                  border: '1px solid #0ea5e9',
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px'
-                }}>
-                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#0c4a6e' }}>
-                    👉 Next Best Action:
-                  </span>
-                  <span style={{ fontSize: '13px', color: '#075985' }}>
-                    <strong>{nextAction.action}</strong> ({nextAction.file})
-                  </span>
-                  <span style={{
-                    backgroundColor: nextAction.impact === 'Critical' ? '#fee2e2' : 
-                                   nextAction.impact === 'High' ? '#fef3c7' : '#dcfce7',
-                    color: nextAction.impact === 'Critical' ? '#991b1b' : 
-                          nextAction.impact === 'High' ? '#713f12' : '#166534',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    fontSize: '11px',
-                    fontWeight: 'bold'
-                  }}>
-                    {nextAction.impact}
-                  </span>
-                </div>
-              );
-            })()}
+            {/* Next Best Action 固定ウィジェット */}
+            <NextBestActionWidget analysis={analysisResult} />
 
             {/* Level 1: 一目サマリー（最上部） */}
             <div style={{ marginBottom: '20px' }}>
