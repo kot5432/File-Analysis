@@ -8,6 +8,7 @@ import { estimateAIGenerated } from './lib/analysis/aiEstimation';
 import { calculateBlackboxRisk } from './lib/analysis/blackboxRisk';
 import { RiskGauge } from './components/RiskGauge';
 import { resolveImport, extractDependencies } from './lib/analysis/importResolver';
+import JSZip from 'jszip';
 
 // --- Types & Interfaces ---
 
@@ -4954,20 +4955,39 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
   };
 
   const extractZipFile = async (file: File): Promise<{ path: string; content: string }[]> => {
-    const JSZip = require('jszip');
-    const zip = new JSZip();
-    const data = await file.arrayBuffer();
-    const contents = await zip.loadAsync(data);
-    const files: { path: string; content: string }[] = [];
+    try {
+      const zip = new JSZip();
+      const data = await file.arrayBuffer();
+      const contents = await zip.loadAsync(data);
+      const files: { path: string; content: string }[] = [];
 
-    for (const [path, fileData] of Object.entries(contents.files)) {
-      if ((fileData as any).dir) continue;
-      if (['node_modules/', '.git/', 'dist/', 'build/'].some(p => path.includes(p))) continue;
-      if (isSupportedFile(path)) {
-        files.push({ path, content: await (fileData as any).async('string') });
+      for (const [path, fileData] of Object.entries(contents.files)) {
+        if ((fileData as any).dir) continue;
+        
+        // Windowsパスの正規化
+        const normalizedPath = path.replace(/\\/g, "/").replace(/^\.\//, "");
+        
+        // 除外ディレクトリ
+        if (['node_modules/', '.git/', 'dist/', 'build/'].some(p => normalizedPath.includes(p))) continue;
+        
+        // サポート対象ファイル
+        if (isSupportedFile(normalizedPath)) {
+          try {
+            const content = await (fileData as any).async('string');
+            files.push({ path: normalizedPath, content });
+          } catch (contentError) {
+            console.warn(`Failed to read file ${normalizedPath}:`, contentError);
+            // エラーがあっても処理を続行
+            continue;
+          }
+        }
       }
+      
+      return files;
+    } catch (error) {
+      console.error('ZIP extraction error:', error);
+      throw new Error(`ZIPファイルの解析に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
     }
-    return files;
   };
 
   const analyzeFile = async () => {
@@ -4978,19 +4998,36 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
     try {
       if (selectedFile.name.toLowerCase().endsWith('.zip')) {
         const extracted = await extractZipFile(selectedFile);
-        const fileMap = extracted.reduce((m, f) => ({ ...m, [f.path.replace(/\\/g, "/").replace(/^\.\//, "")]: f.content }), {} as Record<string, string>);
+        
+        if (extracted.length === 0) {
+          throw new Error('解析可能なファイルが見つかりませんでした。サポート対象のファイルが含まれているか確認してください。');
+        }
+        
+        const fileMap = extracted.reduce((m, f) => ({ ...m, [f.path]: f.content }), {} as Record<string, string>);
 
         const analyzed = extracted.map(f => {
-          const lang = detectLanguage(f.path);
-          const content = f.content;
-          return {
-            fileName: f.path, language: lang, technologies: detectTechnologies(content, lang),
-            size: content.length, lines: content.split('\n').length,
-            structure: { functions: extractFunctions(content), classes: extractClasses(content), imports: extractImports(content), exports: extractExports(content) },
-            dependencies: extractDependencies(content),
-            resolvedDependencies: extractDependencies(content).map(d => resolveImport(f.path, d, fileMap)).filter((d): d is string => d !== null),
-            blackboxRisk: analyzeBlackboxRisk(content)
-          };
+          try {
+            const lang = detectLanguage(f.path);
+            const content = f.content;
+            return {
+              fileName: f.path, language: lang, technologies: detectTechnologies(content, lang),
+              size: content.length, lines: content.split('\n').length,
+              structure: { functions: extractFunctions(content), classes: extractClasses(content), imports: extractImports(content), exports: extractExports(content) },
+              dependencies: extractDependencies(content),
+              resolvedDependencies: extractDependencies(content).map(d => resolveImport(f.path, d, fileMap)).filter((d): d is string => d !== null),
+              blackboxRisk: analyzeBlackboxRisk(content)
+            };
+          } catch (fileError) {
+            console.warn(`Failed to analyze file ${f.path}:`, fileError);
+            // エラーがあっても基本情報は返す
+            return {
+              fileName: f.path, language: 'unknown', technologies: [],
+              size: f.content.length, lines: f.content.split('\n').length,
+              structure: { functions: [], classes: [], imports: [], exports: [] },
+              dependencies: [], resolvedDependencies: [],
+              blackboxRisk: { score: 0, level: 'LOW' as const, breakdown: { fileSize: 0, functionLength: 0, nestingDepth: 0, commentRate: 0, unusedCode: 0, typeSafety: 0 }, nestingDepth: { maxDepth: 0, avgDepth: 0, riskScore: 0 }, commentRatio: { commentRatio: 0, riskScore: 0, commentLines: 0, totalLines: 0 }, fileSize: { lineCount: 0, riskScore: 0 }, unusedFunctions: { count: 0, riskScore: 0 }, aiEstimation: { likelihood: 0, confidence: 0 } }
+            };
+          }
         });
 
         const langCounts: Record<string, number> = {};
@@ -5018,7 +5055,14 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
+      console.error('Analysis error:', err);
+      const errorMessage = err instanceof Error ? err.message : '不明なエラーが発生しました';
+      setError(errorMessage);
+      
+      // ユーザーフレンドリーなエラーメッセージ
+      if (errorMessage.includes('ZIP') || errorMessage.includes('解析')) {
+        setError(`${errorMessage}\n\n💡 対策:\n- サポート対象のファイル（.js, .ts, .jsx, .tsx, .py, .javaなど）が含まれているか確認\n- ZIPファイルが破損していないか確認\n- ファイルサイズが大きすぎないか確認（最大50MB推奨）`);
+      }
     } finally {
       setIsAnalyzing(false);
     }
