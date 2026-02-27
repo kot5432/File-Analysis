@@ -5169,19 +5169,44 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         border: `1px solid ${color}`,
                         borderRadius: '6px',
                         padding: '10px',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Black Box Index</div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
-                          {bbi.score}
-                        </div>
-                        <div style={{ fontSize: '10px', color, fontWeight: 'bold', marginBottom: '4px' }}>
-                          {level === 'CRITICAL' ? '🔴 CRITICAL' : level === 'WARNING' ? '⚠️ WARNING' : '✅ HEALTHY'}
-                        </div>
-                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          {bbi.interpretation[0] || 'Main issue: 高リスクファイル集中'}
-                        </div>
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}
+                      onClick={() => {
+                        alert(`ブラックボックス指数 詳細情報:\n\nスコア: ${bbi.score}\nレベル: ${level}\n\n解釈:\n${bbi.interpretation.join('\n')}\n\n推奨アクション:\n${level === 'CRITICAL' ? '即時対応が必要です' : level === 'WARNING' ? '監視と改善が必要です' : '現状維持で問題ありません'}`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>ブラックボックス指数</div>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
+                        {bbi.score}
                       </div>
+                      <div style={{ fontSize: '10px', color, fontWeight: 'bold', marginBottom: '4px' }}>
+                        {level === 'CRITICAL' ? '🔴 要対応' : level === 'WARNING' ? '⚠️ 要注意' : '✅ 健全'}
+                      </div>
+                      <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
+                        {bbi.interpretation[0] || '主な問題: 高リスクファイル集中'}
+                      </div>
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '4px', 
+                        right: '4px', 
+                        fontSize: '10px', 
+                        color: '#999',
+                        opacity: 0.7
+                      }}>
+                        🔍
+                      </div>
+                    </div>
                     );
                   })()}
                   
@@ -5196,17 +5221,43 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         border: `1px solid ${color}`,
                         borderRadius: '6px',
                         padding: '10px',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Health Score</div>
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}
+                      onClick={() => {
+                        const weakPoint = health.breakdown.avgCommentRatio < 50 ? 'ドキュメント' : health.breakdown.avgRiskScore > 70 ? 'リスクスコア' : 'コード品質';
+                        alert(`健全性スコア 詳細情報:\n\nスコア: ${health.score}\nレベル: ${level}\n\n内訳:\n• コメント率: ${health.breakdown.avgCommentRatio.toFixed(1)}%\n• 平均リスクスコア: ${health.breakdown.avgRiskScore.toFixed(1)}\n• 高リスクファイル率: ${(health.breakdown.highRiskFileRatio * 100).toFixed(1)}%\n• 平均ネスト深度: ${health.breakdown.avgNestingDepth.toFixed(1)}\n• AI生成率: ${(health.breakdown.avgAiLikelihood * 100).toFixed(1)}%\n\n弱点: ${weakPoint}\n\n推奨アクション:\n${level === 'POOR' ? '全体的な改善が必要です' : level === 'FAIR' ? '部分的な改善を推奨します' : level === 'GOOD' ? '維持と微改善を推奨します' : '現状を維持してください'}`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>健全性スコア</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {health.score}
                         </div>
                         <div style={{ fontSize: '10px', color: color, fontWeight: 'bold', marginBottom: '4px' }}>
-                          {level === 'POOR' ? '🔴 POOR' : level === 'FAIR' ? '🟡 FAIR' : level === 'GOOD' ? '🟢 GOOD' : '✅ EXCELLENT'}
+                          {level === 'POOR' ? '🔴 要改善' : level === 'FAIR' ? '🟡 普通' : level === 'GOOD' ? '🟢 良好' : '✅ 優秀'}
                         </div>
                         <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          Weak: {health.breakdown.avgCommentRatio < 50 ? 'Documentation' : health.breakdown.avgRiskScore > 70 ? 'Risk Score' : 'Code Quality'}
+                          弱点: {health.breakdown.avgCommentRatio < 50 ? 'ドキュメント' : health.breakdown.avgRiskScore > 70 ? 'リスクスコア' : 'コード品質'}
+                        </div>
+                        <div style={{ 
+                          position: 'absolute', 
+                          top: '4px', 
+                          right: '4px', 
+                          fontSize: '10px', 
+                          color: '#999',
+                          opacity: 0.7
+                        }}>
+                          🔍
                         </div>
                       </div>
                     );
@@ -5225,17 +5276,50 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         border: '1px solid #ef4444',
                         borderRadius: '6px',
                         padding: '10px',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>High Risk Files</div>
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}
+                      onClick={() => {
+                        if (!analysisResult.files) return;
+                        const highRiskFiles = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70);
+                        const top3Files = highRiskFiles.slice(0, 3);
+                        const fileList = top3Files.map((file, index) => {
+                          const score = calculateFileRiskScore(file);
+                          return `${index + 1}. ${file.fileName.split('/').pop()} (スコア: ${score.toFixed(1)})`;
+                        }).join('\n');
+                        
+                        alert(`高リスクファイル 詳細情報:\n\nハイリスクファイル数: ${highRiskCount}件\n\nトップ3ハイリスクファイル:\n${fileList}${highRiskFiles.length > 3 ? `\n... 他${highRiskFiles.length - 3}件` : ''}\n\n推奨アクション:\n• 優先的にハイリスクファイルを確認してください\n• AI生成コードの場合は特に注意が必要です\n• 手動レビューとテストの追加を推奨します`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>高リスクファイル</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginBottom: '4px' }}>
                           {highRiskCount}
                         </div>
                         <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', marginBottom: '4px' }}>
-                          🔴 Attention Required
+                          🔴 要対応
                         </div>
                         <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          Top: {topRiskFile?.fileName.split('/').pop() || 'Unknown'}
+                          上位: {topRiskFile?.fileName.split('/').pop() || '不明'}
+                        </div>
+                        <div style={{ 
+                          position: 'absolute', 
+                          top: '4px', 
+                          right: '4px', 
+                          fontSize: '10px', 
+                          color: '#999',
+                          opacity: 0.7
+                        }}>
+                          🔍
                         </div>
                       </div>
                     );
@@ -5251,17 +5335,50 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         border: '1px solid #f97316',
                         borderRadius: '6px',
                         padding: '10px',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Critical Actions</div>
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}
+                      onClick={() => {
+                        const criticalActions = actionPlan.critical.slice(0, 3);
+                        const highActions = actionPlan.high.slice(0, 2);
+                        const actionList = criticalActions.map((action, index) => {
+                          return `C${index + 1}. ${action.title} (${action.filePath})`;
+                        }).concat(highActions.map((action, index) => {
+                          return `H${index + 1}. ${action.title} (${action.filePath})`;
+                        })).join('\n');
+                        
+                        alert(`重要アクション 詳細情報:\n\nクリティカルアクション数: ${actionPlan.summary.critical}件\nハイプライオリティ数: ${actionPlan.summary.high}件\n\n優先アクション:\n${actionList}\n\n推定工数: 約${Math.round(totalHours)}時間\n\n推奨アクション:\n• クリティカルアクションから優先的に対応してください\n• AI生成コードの修正は特に注意が必要です\n• テストとレビューを必ず実施してください`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>重要アクション</div>
                         <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f97316', marginBottom: '4px' }}>
                           {actionPlan.summary.critical}
                         </div>
                         <div style={{ fontSize: '10px', color: '#f97316', fontWeight: 'bold', marginBottom: '4px' }}>
-                          🚨 Urgent Action Required
+                          🚨 至急対応
                         </div>
                         <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          Est: ~{Math.round(totalHours)} hours
+                          推定: 約{Math.round(totalHours)}時間
+                        </div>
+                        <div style={{ 
+                          position: 'absolute', 
+                          top: '4px', 
+                          right: '4px', 
+                          fontSize: '10px', 
+                          color: '#999',
+                          opacity: 0.7
+                        }}>
+                          🔍
                         </div>
                       </div>
                     );
