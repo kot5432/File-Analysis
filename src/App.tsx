@@ -3767,7 +3767,7 @@ const FileGrid: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) =>
     </div>
     {files.length > 10 && <p className="more-files">他{files.length - 10}ファイル...</p>}
   </div>
-}));
+);
 
 
 // --- Main App Component ---
