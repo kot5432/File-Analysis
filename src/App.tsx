@@ -422,7 +422,324 @@ const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ co
   );
 };
 
-// --- Sub-components ---
+// --- 実行フロー分析コンポーネント ---
+const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
+  const analyzeExecutionFlow = () => {
+    const flow = {
+      entryPoints: [] as string[],
+      dataFlow: [] as string[],
+      apiCalls: [] as string[],
+      eventHandlers: [] as string[],
+      asyncOperations: [] as string[],
+      dependencies: [] as string[]
+    };
+    
+    // エントリーポイント検出
+    const entryMatches = content.match(/(?:function\s+main|app\.listen|server\.listen|ReactDOM\.render|Vue\.createApp|angular\.bootstrap|document\.addEventListener|window\.onload|export\s+default|module\.exports)/g);
+    if (entryMatches) {
+      entryMatches.forEach(match => {
+        const entry = match.replace(/.*function\s+|app\.|server\.|ReactDOM\.|Vue\.|angular\.|document\.|window\.|export\s+|module\./g, '').trim();
+        if (entry) flow.entryPoints.push(entry);
+      });
+    }
+    
+    // データフロー分析
+    const dataFlowPatterns = [
+      { pattern: /useState|useEffect|useContext|useReducer/g, type: 'React Hooks' },
+      { pattern: /this\.setState|this\.state|componentDidMount|componentDidUpdate/g, type: 'React Class Component' },
+      { pattern: /data\s*=|setData|this\.data|\$data/g, type: 'Data Binding' },
+      { pattern: /props\.|this\.props|attributes/g, type: 'Props Passing' },
+      { pattern: /emit|dispatch|publish|next|resolve/g, type: 'Event System' }
+    ];
+    
+    dataFlowPatterns.forEach(({ pattern, type }) => {
+      const matches = content.match(pattern);
+      if (matches) {
+        flow.dataFlow.push(type);
+      }
+    });
+    
+    // API呼び出し検出
+    const apiPatterns = [
+      /fetch\s*\(/g,
+      /axios\./g,
+      /XMLHttpRequest/g,
+      /\.get\s*\(/g,
+      /\.post\s*\(/g,
+      /\.put\s*\(/g,
+      /\.delete\s*\(/g,
+      /req\./g,
+      /res\./g
+    ];
+    
+    apiPatterns.forEach(pattern => {
+      const matches = content.match(pattern);
+      if (matches) {
+        flow.apiCalls.push(`API呼び出し (${pattern.source})`);
+      }
+    });
+    
+    // イベントハンドラ検出
+    const eventPatterns = [
+      /addEventListener/g,
+      /onclick|onchange|onsubmit|onload/g,
+      /\.on\s*\(/g,
+      /handle\w+/g,
+      /on\w+\s*=/g
+    ];
+    
+    eventPatterns.forEach(pattern => {
+      const matches = content.match(pattern);
+      if (matches) {
+        flow.eventHandlers.push(`イベント処理 (${pattern.source})`);
+      }
+    });
+    
+    // 非同期処理検出
+    const asyncPatterns = [
+      /async\s+\w+/g,
+      /await\s+/g,
+      /Promise\./g,
+      /\.then\s*\(/g,
+      /callback/g,
+      /setTimeout|setInterval/g
+    ];
+    
+    asyncPatterns.forEach(pattern => {
+      const matches = content.match(pattern);
+      if (matches) {
+        flow.asyncOperations.push(`非同期処理 (${pattern.source})`);
+      }
+    });
+    
+    // 依存関係分析
+    const importPatterns = [
+      /import\s+.*from\s+['"]([^'"]+)['"]/g,
+      /require\s*\(\s*['"]([^'"]+)['"]/g,
+      /@import/g
+    ];
+    
+    importPatterns.forEach(pattern => {
+      const matches = content.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          const dep = match.match(/from\s+['"]([^'"]+)['"]/)?.[1] || match.match(/require\s*\(\s*['"]([^'"]+)['"]/)?.[1];
+          if (dep && !flow.dependencies.includes(dep)) {
+            flow.dependencies.push(dep);
+          }
+        });
+      }
+    });
+    
+    return flow;
+  };
+  
+  const flow = analyzeExecutionFlow();
+  
+  const getFlowDescription = () => {
+    if (flow.entryPoints.length === 0) return 'エントリーポイントが不明';
+    
+    let description = `この${language}コードは「`;
+    
+    // メインパターン分析
+    if (flow.entryPoints.includes('main') || flow.entryPoints.includes('app.listen')) {
+      description += 'サーバーサイド実行';
+    } else if (flow.entryPoints.includes('render') || flow.entryPoints.includes('createApp')) {
+      description += 'クライアントサイド実行';
+    } else if (flow.entryPoints.includes('addEventListener')) {
+      description += 'イベント駆動';
+    } else {
+      description += 'モジュールベース';
+    }
+    
+    description += '」で動作しており';
+    
+    // データフロー説明
+    if (flow.dataFlow.length > 0) {
+      description += `、「${flow.dataFlow.join('・')}」によるデータフローを持ち`;
+    }
+    
+    // API説明
+    if (flow.apiCalls.length > 0) {
+      description += `、「${flow.apiCalls.slice(0, 3).join('・')}${flow.apiCalls.length > 3 ? 'など' : ''}」でAPI通信を行い`;
+    }
+    
+    // 非同期処理説明
+    if (flow.asyncOperations.length > 0) {
+      description += `、「${flow.asyncOperations.slice(0, 2).join('・')}${flow.asyncOperations.length > 2 ? 'など' : ''}」の非同期処理を使用`;
+    }
+    
+    description += '。';
+    
+    // アーキテクチャパターン
+    if (flow.dependencies.length > 5) {
+      description += '多くの外部ライブラリに依存する複雑なアーキテクチャです。';
+    } else if (flow.asyncOperations.length > 2) {
+      description += '非同期処理を多用するリアルタイム性の高いアプリケーションです。';
+    } else if (flow.eventHandlers.length > 3) {
+      description += 'イベント駆動型のインタラクティブなアプリケーションです。';
+    } else {
+      description += 'シンプルな構造のコードです。';
+    }
+    
+    return description;
+  };
+  
+  return (
+    <div className="execution-flow-analysis" style={{ 
+      backgroundColor: '#f5f5f5', 
+      padding: '16px', 
+      borderRadius: '8px', 
+      marginTop: '16px' 
+    }}>
+      <h3>🔍 実行フロー分析</h3>
+      
+      {/* エントリーポイント */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>🚀 エントリーポイント</h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {flow.entryPoints.length > 0 ? (
+            flow.entryPoints.map((point, index) => (
+              <span 
+                key={index}
+                style={{ 
+                  backgroundColor: '#e6f7ff', 
+                  padding: '6px 12px', 
+                  borderRadius: '16px', 
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                {point}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: '#666' }}>エントリーポイントが検出されませんでした</span>
+          )}
+        </div>
+      </div>
+      
+      {/* データフロー */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>📊 データフロー</h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {flow.dataFlow.length > 0 ? (
+            flow.dataFlow.map((flowType, index) => (
+              <span 
+                key={index}
+                style={{ 
+                  backgroundColor: '#f0f0f0', 
+                  padding: '4px 8px', 
+                  borderRadius: '8px', 
+                  fontSize: '12px',
+                  border: '1px solid #d0d0d0'
+                }}
+              >
+                {flowType}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: '#666' }}>データフローが検出されませんでした</span>
+          )}
+        </div>
+      </div>
+      
+      {/* API呼び出し */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>🌐 API通信</h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {flow.apiCalls.length > 0 ? (
+            flow.apiCalls.map((apiCall, index) => (
+              <span 
+                key={index}
+                style={{ 
+                  backgroundColor: '#fff2e8', 
+                  padding: '4px 8px', 
+                  borderRadius: '8px', 
+                  fontSize: '12px',
+                  border: '1px solid #d0d0d0'
+                }}
+              >
+                {apiCall}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: '#666' }}>API呼び出しが検出されませんでした</span>
+          )}
+        </div>
+      </div>
+      
+      {/* 非同期処理 */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>⚡ 非同期処理</h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {flow.asyncOperations.length > 0 ? (
+            flow.asyncOperations.map((asyncOp, index) => (
+              <span 
+                key={index}
+                style={{ 
+                  backgroundColor: '#f6ffed', 
+                  padding: '4px 8px', 
+                  borderRadius: '8px', 
+                  fontSize: '12px',
+                  border: '1px solid #d0d0d0'
+                }}
+              >
+                {asyncOp}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: '#666' }}>非同期処理が検出されませんでした</span>
+          )}
+        </div>
+      </div>
+      
+      {/* 依存関係 */}
+      <div style={{ marginBottom: '20px' }}>
+        <h4>📦 依存関係</h4>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {flow.dependencies.length > 0 ? (
+            flow.dependencies.slice(0, 10).map((dep, index) => (
+              <span 
+                key={index}
+                style={{ 
+                  backgroundColor: '#d9f7be', 
+                  padding: '4px 8px', 
+                  borderRadius: '8px', 
+                  fontSize: '12px',
+                  border: '1px solid #d0d0d0'
+                }}
+              >
+                {dep}
+              </span>
+            ))
+          ) : (
+            <span style={{ color: '#666' }}>依存関係が検出されませんでした</span>
+          )}
+          {flow.dependencies.length > 10 && (
+            <span style={{ color: '#666', fontStyle: 'italic' }}>
+              ... 他{flow.dependencies.length - 10}件
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {/* 実行フロー説明 */}
+      <div style={{ 
+        backgroundColor: 'white', 
+        padding: '16px', 
+        borderRadius: '8px', 
+        border: '1px solid #e0e0e0',
+        lineHeight: '1.6'
+      }}>
+        <h4>📋 実行フロー解説</h4>
+        <p style={{ margin: 0, fontSize: '14px' }}>
+          {getFlowDescription()}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const RiskBadge: React.FC<{ risk?: BlackboxRisk }> = ({ risk }) => {
   if (!risk) return null;
@@ -937,6 +1254,14 @@ function App() {
               {/* 技術スタック詳細分析 */}
               {analysisResult.type === 'single' && fileContent && (
                 <TechStackAnalysis 
+                  content={fileContent} 
+                  language={analysisResult.language || ''} 
+                />
+              )}
+
+              {/* 実行フロー分析 */}
+              {analysisResult.type === 'single' && fileContent && (
+                <ExecutionFlowAnalysis 
                   content={fileContent} 
                   language={analysisResult.language || ''} 
                 />
