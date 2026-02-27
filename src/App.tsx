@@ -3633,14 +3633,6 @@ const ImprovementActionEngine: React.FC<{ analysis: AnalysisResult }> = ({ analy
     low: { color: '#22c55e', bgColor: '#dcfce7', icon: '✅', label: 'Low' }
   };
   
-  // レポートコピー機能
-  const handleCopyReport = () => {
-    const report = generateActionReport(actionPlan);
-    navigator.clipboard.writeText(report).then(() => {
-      alert('改善アクションレポートをコピーしました！');
-    });
-  };
-  
   return (
     <div style={{
       backgroundColor: '#fafafa',
@@ -3665,27 +3657,10 @@ const ImprovementActionEngine: React.FC<{ analysis: AnalysisResult }> = ({ analy
         padding: '16px',
         marginBottom: '20px'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h4 style={{ margin: 0, color: '#1f2937', fontSize: '14px', fontWeight: '600' }}>
             Recommended Improvements
           </h4>
-          <button
-            onClick={handleCopyReport}
-            style={{
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
-          >
-            📋 レポートコピー
-          </button>
         </div>
         
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
