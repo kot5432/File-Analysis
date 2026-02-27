@@ -948,28 +948,90 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
   const calculateImportanceScore = (file: FileAnalysis): number => {
     let score = 0;
     
-    // エントリーポイント +30
+    // 🥇 ① エントリーポイントボーナス（最重要）
     const fileName = file.fileName.toLowerCase();
+    
     if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      score += 30;
+      score += 50; // 最大ボーナス
     }
     
-    // ファイルサイズによるスコア (大きいほど重要)
-    score += Math.min(file.lines / 100, 20);
+    // 🥈 ② import集中度（大）
+    // 他ファイルからどれだけ参照されているかを推定
+    // 実際にはクロスファイル解析が必要だが、ここではエクスポート数で代替
+    score += Math.min(file.structure.exports.length * 10, 30);
     
-    // インポート集中度 +15
-    score += Math.min(file.structure.imports.length * 3, 15);
+    // 🥉 ③ ファイルサイズ（中）
+    // 大きすぎはノイズになるので上限を設定
+    score += Math.min(file.lines / 50, 20);
     
-    // エクスポート数 +10
-    score += Math.min(file.structure.exports.length * 2, 10);
+    // ④ 技術シグナル（中）
+    // ファイル名や構造から技術的中核を推定
+    if (fileName.includes('router') || fileName.includes('routes')) {
+      score += 15;
+    }
+    if (fileName.includes('controller') || fileName.includes('controllers')) {
+      score += 15;
+    }
+    if (fileName.includes('service') || fileName.includes('services')) {
+      score += 10;
+    }
+    if (fileName.includes('config') || fileName.includes('configuration')) {
+      score += 10;
+    }
     
-    // リスクスコア +15 (危険なファイルは優先)
-    score += (file.blackboxRisk?.score || 0) * 0.15;
-    
-    // 関数・クラス数 +10
-    score += Math.min((file.structure.functions.length + file.structure.classes.length) * 2, 10);
+    // ⑤ ブラックボックスリスク（補助）
+    // 危険ファイルを早期に発見
+    if (file.blackboxRisk && file.blackboxRisk.score > 60) {
+      score += 5;
+    }
     
     return score;
+  };
+
+  const getReasonTags = (file: FileAnalysis, score: number): string[] => {
+    const tags: string[] = [];
+    const fileName = file.fileName.toLowerCase();
+    
+    // エントリーポイント判定
+    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
+      tags.push('🏷 Entry Point');
+    }
+    
+    // import集中度判定
+    if (file.structure.exports.length > 5) {
+      tags.push('🏷 Highly Exported');
+    }
+    
+    // ファイルサイズ判定
+    if (file.lines > 500) {
+      tags.push('🏷 Large File');
+    }
+    
+    // 技術的中核判定
+    if (fileName.includes('router') || fileName.includes('routes')) {
+      tags.push('🏷 Router Core');
+    }
+    if (fileName.includes('controller') || fileName.includes('controllers')) {
+      tags.push('🏷 Controller');
+    }
+    if (fileName.includes('service') || fileName.includes('services')) {
+      tags.push('🏷 Service Layer');
+    }
+    if (fileName.includes('config') || fileName.includes('configuration')) {
+      tags.push('🏷 Configuration');
+    }
+    
+    // リスク判定
+    if (file.blackboxRisk && file.blackboxRisk.score > 60) {
+      tags.push('🏷 High Risk');
+    }
+    
+    // デフォルトタグ
+    if (tags.length === 0) {
+      tags.push('🏷 Standard File');
+    }
+    
+    return tags;
   };
 
   const getReadingOrder = () => {
@@ -984,8 +1046,8 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
           structure: singleFile.structure || { functions: [], classes: [], imports: [], exports: [] },
           blackboxRisk: singleFile.blackboxRisk
         },
-        reason: '唯一のファイル',
-        score: 100
+        score: 100,
+        reasons: ['🏷 Only File']
       }];
     }
     
@@ -994,37 +1056,10 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
     const scoredFiles = files.map(file => ({
       file,
       score: calculateImportanceScore(file),
-      reason: getReason(file)
+      reasons: getReasonTags(file, calculateImportanceScore(file))
     }));
     
     return scoredFiles.sort((a, b) => b.score - a.score).slice(0, 5);
-  };
-
-  const getReason = (file: FileAnalysis): string => {
-    const fileName = file.fileName.toLowerCase();
-    const reasons = [];
-    
-    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      reasons.push('エントリーポイント');
-    }
-    
-    if (file.structure.imports.length > 5) {
-      reasons.push('多くの依存関係');
-    }
-    
-    if (file.structure.exports.length > 3) {
-      reasons.push('重要なモジュール');
-    }
-    
-    if (file.blackboxRisk?.score && file.blackboxRisk.score > 60) {
-      reasons.push('高リスク');
-    }
-    
-    if (file.lines > 500) {
-      reasons.push('大規模ファイル');
-    }
-    
-    return reasons.length > 0 ? reasons.join('・') : '標準的なファイル';
   };
 
   const readingOrder = getReadingOrder();
@@ -1034,17 +1069,17 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
   return (
     <div className="reading-order-guide" style={{
       backgroundColor: '#f8f9fa',
-      padding: '20px',
+      padding: '24px',
       borderRadius: '12px',
       marginBottom: '24px',
       border: '2px solid #e3f2fd'
     }}>
-      <h3 style={{ margin: '0 0 16px 0', color: '#1976d2', fontSize: '18px' }}>
-        📖 読む順番ガイド
+      <h3 style={{ margin: '0 0 16px 0', color: '#1976d2', fontSize: '20px', fontWeight: '600' }}>
+        🧭 Recommended Reading Order
       </h3>
       
-      <div style={{ marginBottom: '16px', fontSize: '14px', color: '#666' }}>
-        💡 この順番で読むと、プロジェクトの理解が最も速くなります
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 この順番で読むと、プロジェクトの理解が最も速くなります。各ファイルの重要度と理由を示しています。
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1071,9 +1106,10 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
+            {/* 順位番号 */}
             <div style={{
-              width: '32px',
-              height: '32px',
+              width: '40px',
+              height: '40px',
               borderRadius: '50%',
               backgroundColor: index === 0 ? '#4caf50' : index === 1 ? '#ff9800' : index === 2 ? '#2196f3' : '#9e9e9e',
               color: 'white',
@@ -1081,53 +1117,90 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 'bold',
-              fontSize: '14px'
+              fontSize: '16px',
+              flexShrink: 0
             }}>
               {index + 1}
             </div>
             
+            {/* ファイル情報 */}
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '4px', color: '#262626' }}>
                 📄 {item.file.fileName}
               </div>
-              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                {item.file.language} • {item.file.lines}行 • {item.file.technologies.slice(0, 3).join(', ')}
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '6px' }}>
+                {item.file.language} • {item.file.lines.toLocaleString()}行 • {item.file.technologies.slice(0, 3).join(', ')}
               </div>
-              <div style={{ fontSize: '12px', color: '#888' }}>
-                🎯 {item.reason}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {item.reasons.map((reason, reasonIndex) => (
+                  <span 
+                    key={reasonIndex}
+                    style={{
+                      backgroundColor: '#f0f0f0',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      color: '#595959',
+                      border: '1px solid #d0d0d0'
+                    }}
+                  >
+                    {reason}
+                  </span>
+                ))}
               </div>
             </div>
             
-            <div style={{ textAlign: 'right' }}>
+            {/* 重要度スコア */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>重要度</div>
               <div style={{
-                fontSize: '18px',
+                fontSize: '20px',
                 fontWeight: 'bold',
                 color: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e'
               }}>
                 {Math.round(item.score)}
+              </div>
+              <div style={{
+                width: '60px',
+                height: '4px',
+                backgroundColor: '#e0e0e0',
+                borderRadius: '2px',
+                marginTop: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${Math.min(item.score, 100)}%`,
+                  height: '100%',
+                  backgroundColor: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e',
+                  borderRadius: '2px'
+                }} />
               </div>
             </div>
           </div>
         ))}
       </div>
       
-      {readingOrder.length > 0 && (
-        <div style={{
-          marginTop: '16px',
-          padding: '12px',
-          backgroundColor: '#e3f2fd',
-          borderRadius: '8px',
-          fontSize: '14px',
-          color: '#1976d2'
-        }}>
-          <strong>💡 読解のヒント:</strong> 
-          {readingOrder[0].file.fileName.includes('index') || readingOrder[0].file.fileName.includes('main') 
-            ? ' まずエントリーポイントから読むことで、プロジェクト全体の構造が理解しやすくなります。'
-            : ' 最初のファイルはプロジェクトの核となる部分です。ここから理解を始めるのが効率的です。'
-          }
+      {/* 読解のヒント */}
+      <div style={{
+        marginTop: '20px',
+        padding: '16px',
+        backgroundColor: '#e3f2fd',
+        borderRadius: '8px',
+        fontSize: '14px',
+        color: '#1976d2',
+        lineHeight: '1.4'
+      }}>
+        <strong>💡 読解のヒント:</strong> 
+        {readingOrder[0].reasons.some(r => r.includes('Entry Point')) 
+          ? ' まずエントリーポイントから読むことで、プロジェクト全体の構造が理解しやすくなります。'
+          : readingOrder[0].reasons.some(r => r.includes('Router') || r.includes('Controller'))
+          ? ' 最初のファイルはプロジェクトの核となるルーティングやコントローラーです。ここから理解を始めるのが効率的です。'
+          : ' 最初のファイルはプロジェクトの重要な要素です。ここから理解を始めることで、全体像が掴みやすくなります。'
+        }
+        <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+          📊 重要度スコアはエントリーポイント、依存関係、ファイルサイズ、技術的中核性を総合的に評価しています。
         </div>
-      )}
+      </div>
     </div>
   );
 };
