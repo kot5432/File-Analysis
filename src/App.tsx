@@ -5151,13 +5151,13 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
             </div>
 
             {/* Level 1: プロジェクト概要（3秒サマリー） */}
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '12px' }}>
               <div 
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: '12px',
+                  marginBottom: '8px',
                   cursor: 'pointer',
                   padding: '8px',
                   borderRadius: '6px',
@@ -5176,12 +5176,12 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
               {expandedSections.level1 && (
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                  gap: '16px',
-                  padding: '20px',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '12px',
+                  padding: '12px',
                   backgroundColor: '#fafafa',
                   border: '1px solid #e5e7eb',
-                  borderRadius: '12px'
+                  borderRadius: '8px'
                 }}>
                   {/* BBIカード */}
                   {(() => {
@@ -5192,19 +5192,18 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       <div style={{
                         backgroundColor: 'white',
                         border: `1px solid ${color}`,
-                        borderRadius: '8px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                        borderRadius: '6px',
+                        padding: '10px',
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: '500' }}>Black Box Index</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color, marginBottom: '6px' }}>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Black Box Index</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {bbi.score}
                         </div>
-                        <div style={{ fontSize: '12px', color, fontWeight: 'bold', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '10px', color, fontWeight: 'bold', marginBottom: '4px' }}>
                           {level === 'CRITICAL' ? '🔴 CRITICAL' : level === 'WARNING' ? '⚠️ WARNING' : '✅ HEALTHY'}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
                           {bbi.interpretation[0] || 'Main issue: 高リスクファイル集中'}
                         </div>
                       </div>
@@ -5220,19 +5219,18 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       <div style={{
                         backgroundColor: 'white',
                         border: `1px solid ${color}`,
-                        borderRadius: '8px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                        borderRadius: '6px',
+                        padding: '10px',
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: '500' }}>Health Score</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color, marginBottom: '6px' }}>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Health Score</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {health.score}
                         </div>
-                        <div style={{ fontSize: '12px', color: color, fontWeight: 'bold', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '10px', color: color, fontWeight: 'bold', marginBottom: '4px' }}>
                           {level === 'POOR' ? '🔴 POOR' : level === 'FAIR' ? '🟡 FAIR' : level === 'GOOD' ? '🟢 GOOD' : '✅ EXCELLENT'}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
                           Weak: {health.breakdown.avgCommentRatio < 50 ? 'Documentation' : health.breakdown.avgRiskScore > 70 ? 'Risk Score' : 'Code Quality'}
                         </div>
                       </div>
@@ -5250,19 +5248,18 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       <div style={{
                         backgroundColor: 'white',
                         border: '1px solid #ef4444',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        boxShadow: '0 2px 4px rgba(239, 68, 68, 0.05)'
+                        borderRadius: '6px',
+                        padding: '10px',
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: '500' }}>High Risk Files</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ef4444', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>High Risk Files</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginBottom: '4px' }}>
                           {highRiskCount}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: 'bold', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', marginBottom: '4px' }}>
                           🔴 Attention Required
                         </div>
-                        <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
                           Top: {topRiskFile?.fileName.split('/').pop() || 'Unknown'}
                         </div>
                       </div>
@@ -5277,19 +5274,18 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       <div style={{
                         backgroundColor: 'white',
                         border: '1px solid #f97316',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        boxShadow: '0 2px 4px rgba(249, 115, 22, 0.05)'
+                        borderRadius: '6px',
+                        padding: '10px',
+                        textAlign: 'center'
                       }}>
-                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: '500' }}>Critical Actions</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f97316', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>Critical Actions</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f97316', marginBottom: '4px' }}>
                           {actionPlan.summary.critical}
                         </div>
-                        <div style={{ fontSize: '12px', color: '#f97316', fontWeight: 'bold', marginBottom: '6px' }}>
+                        <div style={{ fontSize: '10px', color: '#f97316', fontWeight: 'bold', marginBottom: '4px' }}>
                           🚨 Urgent Action Required
                         </div>
-                        <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
                           Est: ~{Math.round(totalHours)} hours
                         </div>
                       </div>
@@ -5300,7 +5296,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
             </div>
 
             {/* Level 2: どこが問題か（中段） */}
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '12px' }}>
               <div 
                 style={{
                   display: 'flex',
