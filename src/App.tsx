@@ -4440,22 +4440,8 @@ function App() {
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
             <div className="summary-result">
-              <div className="summary-stats">
-                {analysisResult.type === 'zip' ? (
-                  <>
-                    <div className="stat-item"><span className="stat-label">総ファイル数</span><span className="stat-value">{analysisResult.totalFiles}</span></div>
-                    <div className="stat-item"><span className="stat-label">総サイズ</span><span className="stat-value">{formatFileSize(analysisResult.summary?.totalSize || 0)}</span></div>
-                    <div className="stat-item"><span className="stat-label">総行数</span><span className="stat-value">{analysisResult.summary?.totalLines}</span></div>
-                  </>
-                ) : (
-                  <>
-                    <div className="stat-item"><span className="stat-label">言語</span><span className="stat-value">{analysisResult.language}</span></div>
-                    <div className="stat-item"><span className="stat-label">サイズ</span><span className="stat-value">{formatFileSize(analysisResult.size || 0)}</span></div>
-                    <div className="stat-item"><span className="stat-label">行数</span><span className="stat-value">{analysisResult.lines}</span></div>
-                  </>
-                )}
-                <h3>{analysisResult.type === 'zip' ? 'プロジェクト概要' : 'ファイル概要'}</h3>
-                <div className="stats-grid">
+              <h3>{analysisResult.type === 'zip' ? 'プロジェクト概要' : 'ファイル概要'}</h3>
+              <div className="stats-grid">
                   {analysisResult.type === 'zip' ? (
                     <>
                       <div className="stat-item"><span className="stat-label">総ファイル数</span><span className="stat-value">{analysisResult.totalFiles}</span></div>
@@ -4613,7 +4599,6 @@ function App() {
                 </div>
               )}
             </div>
-          </div>
         )}
         
         {/* 履歴一覧 */}
