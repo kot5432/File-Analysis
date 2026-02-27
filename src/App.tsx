@@ -1225,6 +1225,391 @@ const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: Analysi
   );
 };
 
+// --- 改善提案型定義 ---
+interface Suggestion {
+  id: string;
+  type: string;
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  description: string;
+  why: string;
+  actions: string[];
+  priority: number;
+  autoFixable?: boolean;
+}
+
+// --- 改善提案生成エンジン ---
+const generateSuggestions = (analysis: AnalysisResult): Suggestion[] => {
+  const suggestions: Suggestion[] = [];
+  
+  if (analysis.type === 'single' && analysis.blackboxRisk) {
+    const risk = analysis.blackboxRisk;
+    const structure = analysis.structure;
+    
+    // ネスト深度チェック
+    if (risk.breakdown?.nestingDepth && risk.breakdown.nestingDepth >= 6) {
+      suggestions.push({
+        id: 'deep_nesting',
+        type: 'deep_nesting',
+        severity: 'high',
+        title: '⚠️ ネストが深すぎます',
+        description: `この関数はネスト深度${risk.breakdown.nestingDepth}で、可読性が著しく低下しています`,
+        why: '深いネストはコードの理解を困難にし、バグの温床になります。特に条件分岐が複雑になると、どのケースで何が起こるか追跡できなくなります。',
+        actions: [
+          '早期returnを使ってネストを浅くする',
+          '関数を複数に分割して責任を分ける',
+          'ガード節を導入して早期に処理を終了させる',
+          '条件式を変数に抽出して可読性を向上させる'
+        ],
+        priority: 1,
+        autoFixable: false
+      });
+    } else if (risk.breakdown?.nestingDepth && risk.breakdown.nestingDepth >= 4) {
+      suggestions.push({
+        id: 'moderate_nesting',
+        type: 'deep_nesting',
+        severity: 'medium',
+        title: '🟡 ネストがやや深いです',
+        description: `ネスト深度${risk.breakdown.nestingDepth}で、改善の余地があります`,
+        why: '現在の状態でも動作しますが、将来的な保守性を考えると改善しておくのが望ましいです。',
+        actions: [
+          '早期returnの導入を検討する',
+          '条件分岐を簡潔に書き直す'
+        ],
+        priority: 3,
+        autoFixable: false
+      });
+    }
+    
+    // コメント率チェック
+    if (risk.breakdown?.commentRate !== undefined && risk.breakdown.commentRate < 0.1) {
+      suggestions.push({
+        id: 'low_comments',
+        type: 'low_comments',
+        severity: 'high',
+        title: '📝 コメントが不足しています',
+        description: `コメント率は${Math.round(risk.breakdown.commentRate * 100)}%で、ドキュメンテーションが不十分です`,
+        why: 'コメントが不足すると、他の開発者（将来の自分も含む）がコードの意図を理解できず、保守性が低下します。特に複雑なロジックには説明が必要です。',
+        actions: [
+          '関数の目的を説明するコメントを追加する',
+          '複雑な処理には行単位のコメントを入れる',
+          'JSDoc形式で関数の引数と戻り値を文書化する',
+          'ビジネスルールや制約事項をコメントで明記する'
+        ],
+        priority: 2,
+        autoFixable: false
+      });
+    } else if (risk.breakdown?.commentRate !== undefined && risk.breakdown.commentRate < 0.2) {
+      suggestions.push({
+        id: 'moderate_comments',
+        type: 'low_comments',
+        severity: 'medium',
+        title: '📝 コメントを増やすことを検討してください',
+        description: `コメント率は${Math.round(risk.breakdown.commentRate * 100)}%です`,
+        why: '現状でも問題ありませんが、より良い保守性のためにコメントを追加することをお勧めします。',
+        actions: [
+          '主要な関数に説明コメントを追加する',
+          '複雑な処理部分に補足説明を入れる'
+        ],
+        priority: 4,
+        autoFixable: false
+      });
+    }
+    
+    // ファイルサイズチェック
+    if (analysis.lines && analysis.lines > 600) {
+      suggestions.push({
+        id: 'large_file',
+        type: 'large_file',
+        severity: 'medium',
+        title: '📁 ファイルが大きいです',
+        description: `このファイルは${analysis.lines.toLocaleString()}行で、管理が困難になりつつあります`,
+        why: '大きなファイルは特定の機能を見つけにくく、変更時の影響範囲が広くなりがちです。また、コンフリクトの原因にもなります。',
+        actions: [
+          '関連する機能を別のファイルに分割する',
+          'クラスやモジュール単位でファイルを整理する',
+          '設定ファイルや定数ファイルを分離する',
+          '単一責任の原則に従って関数をグループ化する'
+        ],
+        priority: 3,
+        autoFixable: false
+      });
+    }
+    
+    // 未使用関数チェック
+    if (structure && structure.functions && structure.functions.length > 0) {
+      const unusedCount = Math.max(0, structure.functions.length - 5); // 簡易的な判定
+      if (unusedCount >= 3) {
+        suggestions.push({
+          id: 'unused_functions',
+          type: 'unused_functions',
+          severity: 'medium',
+          title: '🔍 未使用の関数があります',
+          description: `${unusedCount}個の関数が未使用の可能性があります`,
+          why: '未使用のコードはコードベースを複雑にし、混乱の原因になります。また、セキュリティリスクの原因になることもあります。',
+          actions: [
+            '本当に不要な関数は削除する',
+            'テストでしか使われていない関数を別ファイルに移動する',
+            '将来使う可能性がある関数にはコメントを残す',
+            '動的インポートが必要な関数は明示的にマークする'
+          ],
+          priority: 5,
+          autoFixable: true
+        });
+      }
+    }
+    
+    // 関数の複雑度チェック
+    if (structure && structure.functions && structure.functions.length > 20) {
+      suggestions.push({
+        id: 'too_many_functions',
+        type: 'too_many_functions',
+        severity: 'medium',
+        title: '🔧 関数が多すぎます',
+        description: `このファイルには${structure.functions.length}個の関数があります`,
+        why: '多くの関数が1つのファイルに集まっていると、ファイルの責任範囲が曖昧になり、保守性が低下します。',
+        actions: [
+          '機能単位でファイルを分割する',
+          '関連する関数をクラスやモジュールにまとめる',
+          'ユーティリティ関数は別ファイルに移動する',
+          'エクスポートする関数だけを残し、それ以外はプライベートにする'
+        ],
+        priority: 4,
+        autoFixable: false
+      });
+    }
+    
+    // クラスの複雑度チェック
+    if (structure && structure.classes && structure.classes.length > 5) {
+      suggestions.push({
+        id: 'too_many_classes',
+        type: 'too_many_classes',
+        severity: 'medium',
+        title: '🏗️ クラスが多すぎます',
+        description: `このファイルには${structure.classes.length}個のクラスがあります`,
+        why: '1ファイルに多くのクラスがあると、ファイルの目的が不明確になり、見つけにくくなります。',
+        actions: [
+          'クラス単位でファイルを分割する',
+          '関連するクラスを同じディレクトリにまとめる',
+          '抽象クラスやインターフェースは別ファイルにする'
+        ],
+        priority: 4,
+        autoFixable: false
+      });
+    }
+  }
+  
+  // ZIPファイルの場合の提案
+  if (analysis.type === 'zip' && analysis.files) {
+    // 高リスクファイルの警告
+    const highRiskFiles = analysis.files.filter(f => f.blackboxRisk && f.blackboxRisk.score > 70);
+    if (highRiskFiles.length > 0) {
+      suggestions.push({
+        id: 'high_risk_files',
+        type: 'high_risk_files',
+        severity: 'high',
+        title: '⚠️ 高リスクファイルがあります',
+        description: `${highRiskFiles.length}個のファイルが高リスクと判定されました`,
+        why: '高リスクファイルはバグの温床になりやすく、プロジェクト全体の品質に影響を与える可能性があります。',
+        actions: [
+          '高リスクファイルから優先的に改善する',
+          'リファクタリングの対象として計画に含める',
+          'テストカバレッジを向上させる',
+          'コードレビューで重点的に確認する'
+        ],
+        priority: 1,
+        autoFixable: false
+      });
+    }
+    
+    // プロジェクト規模の警告
+    if (analysis.totalFiles && analysis.totalFiles > 50) {
+      suggestions.push({
+        id: 'large_project',
+        type: 'large_project',
+        severity: 'medium',
+        title: '📂 プロジェクトが大規模です',
+        description: `このプロジェクトは${analysis.totalFiles}個のファイルを含みます`,
+        why: '大規模プロジェクトでは、適切な構造化とドキュメンテーションが重要になります。',
+        actions: [
+          'アーキテクチャ図を作成する',
+          'READMEやドキュメントを整備する',
+          'コーディング規約を統一する',
+          '自動テストを導入する'
+        ],
+        priority: 6,
+        autoFixable: false
+      });
+    }
+  }
+  
+  // 優先度でソート
+  return suggestions.sort((a, b) => a.priority - b.priority);
+};
+
+// --- 改善提案表示コンポーネント ---
+const ImprovementSuggestions: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const suggestions = generateSuggestions(analysis);
+  
+  if (suggestions.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#f6ffed',
+        border: '1px solid #b7eb8f',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '24px'
+      }}>
+        <h3 style={{ margin: '0 0 8px 0', color: '#52c41a', fontSize: '16px' }}>
+          ✅ 改善提案
+        </h3>
+        <p style={{ margin: 0, fontSize: '14px', color: '#52c41a' }}>
+          現在、特に改善の必要はありません。コード品質は良好です！
+        </p>
+      </div>
+    );
+  }
+  
+  const topSuggestions = suggestions.slice(0, 3);
+  const severityColors = {
+    high: '#ff4d4f',
+    medium: '#faad14',
+    low: '#52c41a'
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        🔧 改善提案
+      </h3>
+      
+      {/* TOP3の優先提案 */}
+      <div style={{ marginBottom: '24px' }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          🎯 今すぐ対応すべきTOP3
+        </h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {topSuggestions.map((suggestion, index) => (
+            <div 
+              key={suggestion.id}
+              style={{
+                backgroundColor: 'white',
+                border: `2px solid ${severityColors[suggestion.severity]}`,
+                borderRadius: '8px',
+                padding: '16px',
+                position: 'relative'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '-10px',
+                left: '16px',
+                backgroundColor: severityColors[suggestion.severity],
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}>
+                TOP {index + 1}
+              </div>
+              
+              <div style={{ marginTop: '4px' }}>
+                <h5 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 'bold', color: '#262626' }}>
+                  {suggestion.title}
+                </h5>
+                <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#595959', lineHeight: '1.4' }}>
+                  {suggestion.description}
+                </p>
+                <div style={{ marginBottom: '12px' }}>
+                  <strong style={{ color: '#262626' }}>なぜ危険か：</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#666', lineHeight: '1.4' }}>
+                    {suggestion.why}
+                  </p>
+                </div>
+                <div>
+                  <strong style={{ color: '#262626' }}>改善方法：</strong>
+                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px' }}>
+                    {suggestion.actions.map((action, actionIndex) => (
+                      <li key={actionIndex} style={{ fontSize: '13px', color: '#666', marginBottom: '4px', lineHeight: '1.4' }}>
+                        {action}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {suggestion.autoFixable && (
+                  <div style={{ marginTop: '12px' }}>
+                    <span style={{
+                      backgroundColor: '#e6f7ff',
+                      color: '#1890ff',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      🤖 自動修正可能
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* 全提案リスト */}
+      {suggestions.length > 3 && (
+        <div>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            📋 全ての改善提案
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {suggestions.slice(3).map((suggestion) => (
+              <div 
+                key={suggestion.id}
+                style={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}
+              >
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: severityColors[suggestion.severity],
+                  flexShrink: 0
+                }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+                    {suggestion.title}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    {suggestion.description}
+                  </div>
+                </div>
+                <div style={{ fontSize: '12px', color: '#8c8c8c' }}>
+                  優先度: {suggestion.priority}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -2126,6 +2511,9 @@ function App() {
               files={analysisResult.files} 
               singleFile={analysisResult.type === 'single' ? analysisResult : undefined} 
             />
+
+            {/* 改善提案 */}
+            <ImprovementSuggestions analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
