@@ -1610,15 +1610,268 @@ const ImprovementSuggestions: React.FC<{ analysis: AnalysisResult }> = ({ analys
   );
 };
 
-// --- ファイルリスク型定義 ---
-interface FileRisk {
+// --- Fix提案型定義 ---
+interface FixSuggestion {
+  title: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
+  estimatedEffort?: 'low' | 'medium' | 'high';
+}
+
+// --- Issue → Fix ルールエンジン ---
+const FIX_RULES: Record<string, FixSuggestion[]> = {
+  deep_nesting: [
+    {
+      title: '関数を分割してネストを浅くする',
+      description: '大きな関数を複数の小さな関数に分割し、早期returnやガード節を導入してネスト深度を減らします',
+      priority: 'high',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: '早期returnパターンを導入する',
+      description: '条件分岐の先にreturn文を配置して、ネストを浅くするリファクタリング手法を適用します',
+      priority: 'high',
+      estimatedEffort: 'low'
+    },
+    {
+      title: '条件式を変数に抽出する',
+      description: '複雑な条件式を意味のある変数に抽出して、コードの可読性を向上させます',
+      priority: 'medium',
+      estimatedEffort: 'low'
+    }
+  ],
+  large_file: [
+    {
+      title: 'ファイルを機能単位に分割する',
+      description: '関連する機能を別のファイルに分離し、単一責任の原則に従ってファイルを整理します',
+      priority: 'high',
+      estimatedEffort: 'high'
+    },
+    {
+      title: 'クラスやモジュールに整理する',
+      description: '関連する関数をクラスやモジュールにまとめて、コードの構造を改善します',
+      priority: 'medium',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: '設定ファイルを分離する',
+      description: '定数や設定値を別のファイルに移動して、メインファイルのサイズを削減します',
+      priority: 'low',
+      estimatedEffort: 'low'
+    }
+  ],
+  low_comment_ratio: [
+    {
+      title: '関数の目的を説明するコメントを追加する',
+      description: '各関数の先頭にJSDoc形式で目的、引数、戻り値を文書化します',
+      priority: 'high',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: '複雑な処理に行コメントを追加する',
+      description: 'ビジネスロジックや複雑な処理部分に、なぜそう実装しているかを説明するコメントを追加します',
+      priority: 'medium',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: 'APIエンドポイントを文書化する',
+      description: '公開されているAPIや関数について、使用方法や制約事項をコメントで明記します',
+      priority: 'low',
+      estimatedEffort: 'low'
+    }
+  ],
+  dead_code: [
+    {
+      title: '未使用関数を削除する',
+      description: '本当に使用されていない関数を安全に削除して、コードベースを整理します',
+      priority: 'medium',
+      estimatedEffort: 'low'
+    },
+    {
+      title: 'テスト用コードを別ファイルに移動する',
+      description: 'テストでのみ使用されている関数を、テストファイルに移動して本番コードをクリーンにします',
+      priority: 'low',
+      estimatedEffort: 'low'
+    }
+  ],
+  too_many_functions: [
+    {
+      title: '機能カテゴリでファイルを分割する',
+      description: '関連する機能グループごとにファイルを分割して、各ファイルの責任範囲を明確にします',
+      priority: 'high',
+      estimatedEffort: 'high'
+    },
+    {
+      title: 'ユーティリティ関数を別ファイルに移動する',
+      description: '共通で使用されるユーティリティ関数を専用ファイルに移動して、メインファイルを整理します',
+      priority: 'medium',
+      estimatedEffort: 'medium'
+    }
+  ],
+  too_many_classes: [
+    {
+      title: 'クラス単位でファイルを分割する',
+      description: '1ファイルに複数のクラスがある場合、各クラスを別のファイルに分割します',
+      priority: 'high',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: '関連クラスをディレクトリにまとめる',
+      description: '論理的に関連するクラスを同じディレクトリに配置して、プロジェクト構造を改善します',
+      priority: 'medium',
+      estimatedEffort: 'low'
+    }
+  ],
+  ai_generated_likely: [
+    {
+      title: '人間によるコードレビューを実施する',
+      description: 'AI生成コードは品質にばらつきがあるため、人間による詳細なレビューが必要です',
+      priority: 'high',
+      estimatedEffort: 'medium'
+    },
+    {
+      title: 'テストカバレッジを強化する',
+      description: 'AI生成コードの動作を保証するため、包括的なテストを追加します',
+      priority: 'medium',
+      estimatedEffort: 'high'
+    },
+    {
+      title: 'セキュリティレビューを実施する',
+      description: 'AI生成コードには意図しない脆弱性が含まれる可能性があるため、セキュリティ専門家によるレビューを実施します',
+      priority: 'high',
+      estimatedEffort: 'medium'
+    }
+  ]
+};
+
+// --- Issueキー正規化 ---
+const normalizeIssueKey = (issue: string): string => {
+  const issueMap: Record<string, string> = {
+    'Deep nesting': 'deep_nesting',
+    'Large file': 'large_file',
+    'Low comments': 'low_comment_ratio',
+    'Few comments': 'low_comment_ratio',
+    'Unused functions': 'dead_code',
+    'Many functions': 'too_many_functions',
+    'Too many classes': 'too_many_classes',
+    'AI generated likely': 'ai_generated_likely',
+    'AI generated possible': 'ai_generated_likely',
+    'Moderate nesting': 'deep_nesting',
+    'Moderate size': 'large_file',
+    'Some unused functions': 'dead_code'
+  };
+  
+  return issueMap[issue] || issue.toLowerCase().replace(/\s+/g, '_');
+};
+
+// --- Fix提案生成エンジン ---
+const generateFixSuggestions = (issues: string[]): FixSuggestion[] => {
+  const allFixes: FixSuggestion[] = [];
+  
+  issues.forEach(issue => {
+    const normalizedKey = normalizeIssueKey(issue);
+    const fixes = FIX_RULES[normalizedKey];
+    
+    if (fixes) {
+      allFixes.push(...fixes);
+    }
+  });
+  
+  // 優先度でソート
+  const priorityOrder = { high: 3, medium: 2, low: 1 };
+  return allFixes.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+};
+
+// --- FileRisk型を拡張して再定義 ---
+interface FileRiskWithFixes {
   path: string;
   language: string;
   lines: number;
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high';
   issues: string[];
+  fixes: FixSuggestion[];
 }
+
+// --- 拡張されたファイルリスクデータ生成 ---
+const generateFileRisksWithFixes = (analysis: AnalysisResult): FileRiskWithFixes[] => {
+  if (analysis.type !== 'zip' || !analysis.files) {
+    return [];
+  }
+  
+  return analysis.files.map(file => {
+    const riskScore = calculateFileRiskScore(file);
+    const riskLevel = getRiskLevel(riskScore);
+    
+    // issuesを生成
+    const issues: string[] = [];
+    if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 6) {
+      issues.push('Deep nesting');
+    } else if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 4) {
+      issues.push('Moderate nesting');
+    }
+    if (file.blackboxRisk?.breakdown?.commentRate !== undefined && file.blackboxRisk.breakdown.commentRate < 0.1) {
+      issues.push('Low comments');
+    } else if (file.blackboxRisk?.breakdown?.commentRate !== undefined && file.blackboxRisk.breakdown.commentRate < 0.2) {
+      issues.push('Few comments');
+    }
+    if (file.lines > 600) {
+      issues.push('Large file');
+    } else if (file.lines > 300) {
+      issues.push('Moderate size');
+    }
+    if (file.structure.functions && file.structure.functions.length > 5) {
+      const unusedCount = Math.max(0, file.structure.functions.length - 5);
+      if (unusedCount >= 3) {
+        issues.push('Unused functions');
+      } else if (unusedCount >= 1) {
+        issues.push('Some unused functions');
+      }
+    }
+    if (file.structure.functions && file.structure.functions.length > 20) {
+      issues.push('Many functions');
+    }
+    if (file.structure.classes && file.structure.classes.length > 5) {
+      issues.push('Too many classes');
+    }
+    if (file.blackboxRisk?.aiEstimation?.aiLikelihood && file.blackboxRisk.aiEstimation.aiLikelihood >= 70) {
+      issues.push('AI generated likely');
+    } else if (file.blackboxRisk?.aiEstimation?.aiLikelihood && file.blackboxRisk.aiEstimation.aiLikelihood >= 40) {
+      issues.push('AI generated possible');
+    }
+    
+    // fixesを生成
+    const fixes = generateFixSuggestions(issues);
+    
+    return {
+      path: file.fileName,
+      language: file.language,
+      lines: file.lines,
+      riskScore,
+      riskLevel,
+      issues,
+      fixes
+    };
+  }).sort((a, b) => b.riskScore - a.riskScore);
+};
+
+// --- Quick Fixコピー機能 ---
+const generateRefactorPrompt = (filePath: string, issues: string[], fixes: FixSuggestion[]): string => {
+  const highPriorityFixes = fixes.filter(f => f.priority === 'high');
+  
+  let prompt = `// Refactor ${filePath}\n`;
+  prompt += `// Issues: ${issues.join(', ')}\n\n`;
+  
+  highPriorityFixes.forEach((fix, index) => {
+    prompt += `// Fix ${index + 1}: ${fix.title}\n`;
+    prompt += `// ${fix.description}\n\n`;
+  });
+  
+  prompt += `// Please implement these fixes while maintaining the original functionality.\n`;
+  prompt += `// Focus on code readability, maintainability, and best practices.\n`;
+  
+  return prompt;
+};
 
 // --- ファイルリスク計算エンジン ---
 const calculateFileRiskScore = (file: FileAnalysis): number => {
@@ -1693,48 +1946,14 @@ const getRiskLevel = (score: number): 'low' | 'medium' | 'high' => {
   return 'low';
 };
 
-// --- ファイルリスクデータ生成 ---
-const generateFileRisks = (analysis: AnalysisResult): FileRisk[] => {
-  if (analysis.type !== 'zip' || !analysis.files) {
-    return [];
-  }
-  
-  return analysis.files.map(file => {
-    const riskScore = calculateFileRiskScore(file);
-    const riskLevel = getRiskLevel(riskScore);
-    
-    // issuesを生成
-    const issues: string[] = [];
-    if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 6) {
-      issues.push('Deep nesting');
-    }
-    if (file.blackboxRisk?.breakdown?.commentRate !== undefined && file.blackboxRisk.breakdown.commentRate < 0.1) {
-      issues.push('Low comments');
-    }
-    if (file.lines > 600) {
-      issues.push('Large file');
-    }
-    if (file.structure.functions && file.structure.functions.length > 5) {
-      issues.push('Many functions');
-    }
-    if (file.blackboxRisk?.aiEstimation?.aiLikelihood && file.blackboxRisk.aiEstimation.aiLikelihood >= 70) {
-      issues.push('AI generated likely');
-    }
-    
-    return {
-      path: file.fileName,
-      language: file.language,
-      lines: file.lines,
-      riskScore,
-      riskLevel,
-      issues
-    };
-  }).sort((a, b) => b.riskScore - a.riskScore); // riskScore降順ソート
+// --- ファイルリスクデータ生成（旧バージョン互換性）---
+const generateFileRisks = (analysis: AnalysisResult): FileRiskWithFixes[] => {
+  return generateFileRisksWithFixes(analysis);
 };
 
-// --- ヒートマップ表示コンポーネント ---
-const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
-  const fileRisks = generateFileRisks(analysis);
+// --- ヒートマップ表示コンポーネント（Fix提案付き）---
+const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const fileRisks = generateFileRisksWithFixes(analysis);
   
   if (fileRisks.length === 0) {
     return null;
@@ -1750,13 +1969,20 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
     low: { color: '#52c41a', bgColor: '#f6ffed', icon: '🟢' }
   };
   
-  // ファイルサイズに基づくカードサイズ（最小80px、最大200px）
-  const getCardSize = (lines: number) => {
-    const minSize = 80;
-    const maxSize = 200;
-    const maxLines = 1000;
-    const size = minSize + (lines / maxLines) * (maxSize - minSize);
-    return Math.min(Math.max(size, minSize), maxSize);
+  // 優先度の色
+  const priorityConfig = {
+    high: { color: '#ff4d4f', label: 'HIGH' },
+    medium: { color: '#faad14', label: 'MED' },
+    low: { color: '#52c41a', label: 'LOW' }
+  };
+  
+  // Quick Fixコピー機能
+  const handleCopyPrompt = (filePath: string, issues: string[], fixes: FixSuggestion[]) => {
+    const prompt = generateRefactorPrompt(filePath, issues, fixes);
+    navigator.clipboard.writeText(prompt).then(() => {
+      // コピー成功のフィードバック（簡易版）
+      alert('リファクタリングプロンプトをコピーしました！');
+    });
   };
   
   return (
@@ -1768,11 +1994,11 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
       marginBottom: '24px'
     }}>
       <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
-        🗺️ リスクヒートマップ
+        🗺️ リスクヒートマップ & 修正提案
       </h3>
       
       <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
-        💡 プロジェクトの危険分布を可視化。赤いファイルから優先的に改善しましょう。
+        💡 プロジェクトの危険分布と具体的な修正提案を表示。赤いファイルから優先的に改善しましょう。
       </div>
       
       {/* 最初に直すべき3ファイル */}
@@ -1780,7 +2006,7 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
         <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           🎯 最初に直すべき3ファイル
         </h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {top3Files.map((file, index) => {
             const config = riskConfig[file.riskLevel];
             return (
@@ -1789,30 +2015,99 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
                 style={{
                   backgroundColor: config.bgColor,
                   border: `1px solid ${config.color}`,
-                  borderRadius: '6px',
-                  padding: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px'
+                  borderRadius: '8px',
+                  padding: '16px'
                 }}
               >
-                <div style={{
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  color: config.color
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+                  <div style={{
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    color: config.color,
+                    flexShrink: 0
+                  }}>
+                    {config.icon} TOP {index + 1}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>
+                      {file.path}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                      Risk: {file.riskScore} • {file.lines} lines • {file.language}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      Issues: {file.issues.join(' • ')}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 修正提案セクション */}
+                <div style={{ 
+                  backgroundColor: 'white', 
+                  border: '1px solid #e0e0e0', 
+                  borderRadius: '6px', 
+                  padding: '12px',
+                  marginBottom: '12px'
                 }}>
-                  {config.icon} TOP {index + 1}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '2px' }}>
-                    {file.path}
+                  <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '8px', color: '#262626' }}>
+                    💡 Suggested Fixes
                   </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
-                    Risk: {file.riskScore} • {file.lines} lines • {file.language}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {file.fixes.slice(0, 3).map((fix, fixIndex) => {
+                      const priorityConfig = {
+                        high: { color: '#ff4d4f', label: 'HIGH' },
+                        medium: { color: '#faad14', label: 'MED' },
+                        low: { color: '#52c41a', label: 'LOW' }
+                      };
+                      const pConfig = priorityConfig[fix.priority];
+                      
+                      return (
+                        <div key={fixIndex} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <span style={{
+                            backgroundColor: pConfig.color,
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            flexShrink: 0,
+                            marginTop: '2px'
+                          }}>
+                            {pConfig.label}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '2px' }}>
+                              {fix.title}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                              {fix.description}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {file.issues.join(' • ')}
+                
+                {/* Quick Fixボタン */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => handleCopyPrompt(file.path, file.issues, file.fixes)}
+                    style={{
+                      backgroundColor: '#1890ff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px 16px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#40a9ff'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1890ff'}
+                  >
+                    📋 Copy refactor prompt
+                  </button>
                 </div>
               </div>
             );
@@ -1834,7 +2129,6 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
         }}>
           {fileRisks.map((file) => {
             const config = riskConfig[file.riskLevel];
-            const cardSize = getCardSize(file.lines);
             
             return (
               <div
@@ -1844,7 +2138,7 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
                   border: `2px solid ${config.color}`,
                   borderRadius: '8px',
                   padding: '8px',
-                  height: `${cardSize}px`,
+                  height: '100px',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
@@ -1866,7 +2160,7 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
                   e.currentTarget.style.boxShadow = 'none';
                   e.currentTarget.style.zIndex = '1';
                 }}
-                title={`${file.path}\nRisk: ${file.riskScore}\nLines: ${file.lines}\nIssues: ${file.issues.join(', ')}`}
+                title={`${file.path}\nRisk: ${file.riskScore}\nLines: ${file.lines}\nIssues: ${file.issues.join(', ')}\nFixes: ${file.fixes.length} suggestions`}
               >
                 <div style={{
                   fontSize: '20px',
@@ -1899,47 +2193,8 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
                   fontSize: '9px',
                   color: '#888'
                 }}>
-                  {file.lines} lines
+                  {file.fixes.length} fixes
                 </div>
-                
-                {/* ホバー時の詳細情報 */}
-                <div style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  backgroundColor: 'white',
-                  border: '1px solid #d9d9d9',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: '100',
-                  opacity: '0',
-                  pointerEvents: 'none',
-                  transition: 'opacity 0.2s',
-                  width: '200px',
-                  marginBottom: '4px'
-                }}
-                className="heatmap-tooltip"
-              >
-                <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '4px' }}>
-                  {file.path}
-                </div>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
-                  Risk: {file.riskScore} ({file.riskLevel.toUpperCase()})
-                </div>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
-                  Language: {file.language}
-                </div>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
-                  Lines: {file.lines}
-                </div>
-                {file.issues.length > 0 && (
-                  <div style={{ fontSize: '10px', color: '#666' }}>
-                    Issues: {file.issues.join(', ')}
-                  </div>
-                )}
-              </div>
               </div>
             );
           })}
@@ -1947,7 +2202,7 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
       </div>
       
       {/* 凡例 */}
-      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
         {Object.entries(riskConfig).map(([level, config]) => (
           <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <div style={{
@@ -1962,17 +2217,6 @@ const RiskHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
           </div>
         ))}
       </div>
-      
-      {/* ツールチップ用スタイル */}
-      <style>{`
-        .heatmap-tooltip {
-          opacity: 0;
-          pointer-events: none;
-        }
-        div:hover .heatmap-tooltip {
-          opacity: 1;
-        }
-      `}</style>
     </div>
   );
 };
@@ -2883,7 +3127,7 @@ function App() {
             <ImprovementSuggestions analysis={analysisResult} />
 
             {/* リスクヒートマップ */}
-            <RiskHeatmap analysis={analysisResult} />
+            <RiskHeatmapWithFixes analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
