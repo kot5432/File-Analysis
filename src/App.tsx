@@ -422,61 +422,236 @@ const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ co
   );
 };
 
+// --- プロジェクトタイプ自動判定ロジック ---
+const detectProjectType = (result: AnalysisResult, content?: string): {
+  type: string;
+  confidence: number;
+  reasons: string[];
+} => {
+  const technologies = result.type === 'zip' 
+    ? Object.keys(result.summary?.technologies || {})
+    : result.technologies || [];
+  
+  const languages = result.type === 'zip'
+    ? Object.keys(result.summary?.languages || {})
+    : [result.language].filter(Boolean);
+  
+  const reasons: string[] = [];
+  let confidence = 0;
+  let projectType = 'General Software Project';
+
+  // Step A: フルスタック判定（最優先）
+  const frontendFrameworks = ['React', 'Vue.js', 'Angular', 'Svelte', 'Next.js', 'Nuxt.js'];
+  const backendFrameworks = ['Express.js', 'Fastify', 'Koa.js', 'NestJS', 'Django', 'Flask', 'Spring Boot'];
+  
+  const hasFrontend = frontendFrameworks.some(fw => technologies.includes(fw));
+  const hasBackend = backendFrameworks.some(fw => technologies.includes(fw));
+  
+  if (hasFrontend && hasBackend) {
+    projectType = 'Fullstack Web App';
+    confidence = 0.9;
+    
+    if (technologies.includes('React')) {
+      reasons.push('React detected');
+    }
+    if (technologies.includes('Vue.js')) {
+      reasons.push('Vue.js detected');
+    }
+    if (technologies.includes('Express.js')) {
+      reasons.push('Express.js backend');
+    }
+    if (technologies.includes('Node.js')) {
+      reasons.push('Node.js runtime');
+    }
+    
+    return { type: projectType, confidence, reasons };
+  }
+
+  // Step B: フロントエンド判定
+  if (hasFrontend) {
+    if (technologies.includes('React')) {
+      // React系の詳細判定
+      if (technologies.includes('Next.js')) {
+        projectType = 'Next.js App';
+        confidence = 0.85;
+        reasons.push('Next.js framework detected');
+      } else if (content && (content.includes('ReactDOM.render') || content.includes('createRoot'))) {
+        projectType = 'React SPA';
+        confidence = 0.9;
+        reasons.push('React detected');
+        reasons.push('ReactDOM entry point');
+        if (content.includes('getServerSideProps') || content.includes('getStaticProps')) {
+          projectType = 'React SSR App';
+          reasons.push('SSR features detected');
+        }
+      } else {
+        projectType = 'React App';
+        confidence = 0.75;
+        reasons.push('React detected');
+      }
+    } else if (technologies.includes('Vue.js')) {
+      if (technologies.includes('Nuxt.js')) {
+        projectType = 'Nuxt.js App';
+        confidence = 0.85;
+        reasons.push('Nuxt.js framework detected');
+      } else if (content && (content.includes('Vue.createApp') || content.includes('createApp'))) {
+        projectType = 'Vue.js SPA';
+        confidence = 0.9;
+        reasons.push('Vue.js detected');
+        reasons.push('Vue.createApp entry point');
+      } else {
+        projectType = 'Vue.js App';
+        confidence = 0.75;
+        reasons.push('Vue.js detected');
+      }
+    } else if (technologies.includes('Angular')) {
+      projectType = 'Angular App';
+      confidence = 0.85;
+      reasons.push('Angular framework detected');
+    } else if (technologies.includes('Svelte')) {
+      if (technologies.includes('SvelteKit')) {
+        projectType = 'SvelteKit App';
+        confidence = 0.85;
+        reasons.push('SvelteKit framework detected');
+      } else {
+        projectType = 'Svelte App';
+        confidence = 0.75;
+        reasons.push('Svelte detected');
+      }
+    }
+    
+    return { type: projectType, confidence, reasons };
+  }
+
+  // Step C: バックエンド判定
+  if (hasBackend) {
+    if (technologies.includes('Express.js') || technologies.includes('Node.js')) {
+      projectType = 'Node.js API';
+      confidence = 0.85;
+      reasons.push('Express.js/Node.js detected');
+      
+      if (content && (content.includes('app.listen') || content.includes('app.get') || content.includes('app.post'))) {
+        reasons.push('Express server patterns');
+      }
+    } else if (technologies.includes('Django')) {
+      projectType = 'Django Web App';
+      confidence = 0.9;
+      reasons.push('Django framework detected');
+    } else if (technologies.includes('Flask')) {
+      projectType = 'Flask Web App';
+      confidence = 0.85;
+      reasons.push('Flask framework detected');
+    } else if (technologies.includes('Spring Boot')) {
+      projectType = 'Spring Boot App';
+      confidence = 0.9;
+      reasons.push('Spring Boot framework detected');
+    } else if (technologies.includes('Fastify')) {
+      projectType = 'Fastify API';
+      confidence = 0.8;
+      reasons.push('Fastify framework detected');
+    }
+    
+    return { type: projectType, confidence, reasons };
+  }
+
+  // Step D: スクリプト判定
+  if (languages.length === 1 && !hasFrontend && !hasBackend) {
+    const language = languages[0];
+    
+    if (language === 'Python') {
+      if (content && content.includes('if __name__ == "__main__"')) {
+        projectType = 'Python Script';
+        confidence = 0.8;
+        reasons.push('Python main script pattern');
+      } else {
+        projectType = 'Python Module';
+        confidence = 0.7;
+        reasons.push('Python single language');
+      }
+    } else if (language === 'JavaScript') {
+      if (content && (content.includes('node ') || content.includes('#!/usr/bin/env node'))) {
+        projectType = 'Node.js Script';
+        confidence = 0.8;
+        reasons.push('Node.js script pattern');
+      } else {
+        projectType = 'JavaScript Module';
+        confidence = 0.7;
+        reasons.push('JavaScript single language');
+      }
+    } else if (language === 'Java') {
+      if (content && content.includes('public static void main')) {
+        projectType = 'Java Application';
+        confidence = 0.85;
+        reasons.push('Java main method');
+      } else {
+        projectType = 'Java Module';
+        confidence = 0.7;
+        reasons.push('Java single language');
+      }
+    } else if (language === 'Go') {
+      if (content && content.includes('func main()')) {
+        projectType = 'Go Application';
+        confidence = 0.85;
+        reasons.push('Go main function');
+      } else {
+        projectType = 'Go Module';
+        confidence = 0.7;
+        reasons.push('Go single language');
+      }
+    } else if (language === 'Rust') {
+      if (content && content.includes('fn main()')) {
+        projectType = 'Rust Application';
+        confidence = 0.85;
+        reasons.push('Rust main function');
+      } else {
+        projectType = 'Rust Module';
+        confidence = 0.7;
+        reasons.push('Rust single language');
+      }
+    }
+    
+    return { type: projectType, confidence, reasons };
+  }
+
+  // Step E: 特殊ケース判定
+  if (technologies.includes('HTML') && technologies.includes('CSS') && technologies.includes('JavaScript')) {
+    if (!hasFrontend && !hasBackend) {
+      projectType = 'Static Website';
+      confidence = 0.8;
+      reasons.push('HTML/CSS/JS stack without frameworks');
+    }
+  }
+
+  if (technologies.includes('TypeScript') && languages.includes('TypeScript')) {
+    if (!hasFrontend && !hasBackend) {
+      projectType = 'TypeScript Project';
+      confidence = 0.75;
+      reasons.push('TypeScript single language');
+    }
+  }
+
+  // Step F: フォールバック
+  if (projectType === 'General Software Project') {
+    confidence = 0.5;
+    
+    if (result.type === 'zip' && result.totalFiles && result.totalFiles > 1) {
+      projectType = 'Multi-language Project';
+      reasons.push('Multiple files detected');
+    } else {
+      projectType = 'Single File';
+      reasons.push('Single file project');
+    }
+  }
+
+  return { type: projectType, confidence, reasons };
+};
 // --- プロジェクト要約ビューコンポーネント ---
-const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }> = ({ result, fileName }) => {
-  const getProjectType = () => {
-    const technologies = result.type === 'zip' 
-      ? Object.keys(result.summary?.technologies || {})
-      : result.technologies || [];
-    
-    const languages = result.type === 'zip'
-      ? Object.keys(result.summary?.languages || {})
-      : [result.language].filter(Boolean);
-    
-    // React SPA
-    if (technologies.includes('React') && !technologies.includes('Express.js') && !technologies.includes('Node.js')) {
-      return 'React SPA';
-    }
-    
-    // Node.js API
-    if (technologies.includes('Node.js') || technologies.includes('Express.js')) {
-      if (technologies.includes('React') || technologies.includes('Vue.js')) {
-        return 'Fullstack Web App';
-      }
-      return 'Node.js API';
-    }
-    
-    // Python系
-    if (languages.includes('Python')) {
-      if (technologies.includes('Django') || technologies.includes('Flask')) {
-        return 'Python Web App';
-      }
-      return 'Python Script';
-    }
-    
-    // Java系
-    if (languages.includes('Java')) {
-      if (technologies.includes('Spring Boot')) {
-        return 'Java Web App';
-      }
-      return 'Java Application';
-    }
-    
-    // TypeScript系
-    if (languages.includes('TypeScript')) {
-      if (technologies.includes('React') || technologies.includes('Vue.js')) {
-        return 'TypeScript Web App';
-      }
-      return 'TypeScript Project';
-    }
-    
-    // その他
-    if (result.type === 'zip') {
-      return 'Multi-language Project';
-    }
-    
-    return 'Single File';
-  };
+const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; content?: string }> = ({ result, fileName, content }) => {
+  // 自動判定ロジックを使用
+  const projectTypeDetection = detectProjectType(result, content);
+  const detectedProjectType = projectTypeDetection.type;
+  const confidence = projectTypeDetection.confidence;
+  const reasons = projectTypeDetection.reasons;
 
   const getRiskLevel = () => {
     const riskScore = result.blackboxRisk?.score || 0;
@@ -522,7 +697,7 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }>
     };
   };
 
-  const projectType = getProjectType();
+  const projectType = detectedProjectType;
   const riskLevel = getRiskLevel();
   const aiLevel = getAILevel();
   const mainTechs = getMainTechnologies();
@@ -564,6 +739,16 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }>
             fontWeight: '500'
           }}>
             {projectType}
+            <span style={{ 
+              marginLeft: '8px',
+              fontSize: '12px',
+              color: '#8c8c8c',
+              backgroundColor: '#f0f0f0',
+              padding: '2px 6px',
+              borderRadius: '4px'
+            }}>
+              {Math.round(confidence * 100)}%確信
+            </span>
           </p>
         </div>
         
@@ -749,6 +934,11 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }>
         <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTechs.slice(0, 3).join('・')}を使用した{scale.totalFiles}ファイルのプロジェクトです。
         {riskLevel.level === 'HIGH' && ' リスクが高いため注意が必要です。'}
         {aiLevel.level === 'HIGH' && ' AI生成コードが含まれている可能性があります。'}
+        {reasons.length > 0 && (
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+            <strong>判定理由:</strong> {reasons.join('・')}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1830,6 +2020,7 @@ function App() {
             <ProjectSummaryView 
               result={analysisResult} 
               fileName={analysisResult.fileName || selectedFile?.name || 'Unknown'} 
+              content={fileContent}
             />
 
             {/* 比較体験 */}
