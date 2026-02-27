@@ -1870,24 +1870,7 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   </div>
                 </div>
                 
-                {/* Quick Fixボタン */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => handleCopyPrompt(file.path, file.issues, file.fixes)}
-                    style={{
-                      backgroundColor: promptCopied ? '#52c41a' : '#1890ff',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '6px 12px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      transition: 'background-color 0.3s'
-                    }}
-                  >
-                    {promptCopied ? 'コピーしました！' : 'リファクタリングをコピー'}
-                  </button>
-                </div>
+                {/* Quick Fixセクションは削除 */}
               </div>
             );
           })}
