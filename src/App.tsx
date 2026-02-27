@@ -1015,287 +1015,6 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
     </div>
   );
 };
-// --- 読む順番ガイドコンポーネント ---
-const ReadingOrderGuide: React.FC<{ files?: FileAnalysis[]; singleFile?: AnalysisResult }> = ({ files, singleFile }) => {
-  const calculateImportanceScore = (file: FileAnalysis): number => {
-    let score = 0;
-    const fileName = file.fileName.toLowerCase();
-    
-    // 🥇 ① エントリーポイント検出（最大 +40）
-    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      score += 40; // 明確なエントリ検出
-    } else if (fileName.includes('router') || fileName.includes('routes') || fileName.includes('server')) {
-      score += 25; // 準エントリ
-    }
-    
-    // 🥈 ② import集中度（最大 +25）
-    // エクスポート数をimport集中度の代理として使用
-    const exportCount = file.structure.exports.length;
-    if (exportCount >= 10) {
-      score += 25; // import最多
-    } else if (exportCount >= 5) {
-      score += 15; // 中程度
-    } else if (exportCount >= 2) {
-      score += 5; // 低
-    }
-    
-    // 🥉 ③ ファイルサイズ（最大 +15）
-    // 「適度に大きい」を評価するカーブ
-    const lines = file.lines;
-    if (lines >= 300 && lines <= 800) {
-      score += 15; // 最適サイズ
-    } else if (lines >= 100 && lines < 300) {
-      score += 10; // 小さいけど重要かも
-    } else if (lines > 800 && lines <= 1500) {
-      score += 8; // 大きいけど中核かも
-    } else if (lines > 1500) {
-      score += 3; // 巨大ファイル（減衰）
-    }
-    // 100行未満は加点なし
-    
-    // ④ 技術中枢シグナル（最大 +15）
-    if (fileName.includes('component') || fileName.includes('components')) {
-      score += 10; // React component
-    } else if (fileName.includes('router') || fileName.includes('routes')) {
-      score += 12; // Express router
-    } else if (fileName.includes('controller') || fileName.includes('controllers')) {
-      score += 12; // Controller層
-    } else if (fileName.includes('service') || fileName.includes('services')) {
-      score += 8; // Service層
-    } else if (fileName.includes('view') || fileName.includes('views')) {
-      score += 12; // Django view
-    } else if (fileName.includes('config') || fileName.includes('configuration')) {
-      score += 5; // 設定ファイル
-    } else if (fileName.includes('util') || fileName.includes('utils') || fileName.includes('helper')) {
-      score += 2; // ユーティリティ（低評価）
-    }
-    
-    // ⑤ ブラックボックスリスク（最大 +5）
-    if (file.blackboxRisk && file.blackboxRisk.score > 70) {
-      score += 5; // 高リスク
-    } else if (file.blackboxRisk && file.blackboxRisk.score > 40) {
-      score += 2; // 中リスク
-    }
-    
-    return Math.min(score, 100); // 上限100点
-  };
-
-  const getReasonTags = (file: FileAnalysis, score: number): string[] => {
-    const tags: string[] = [];
-    const fileName = file.fileName.toLowerCase();
-    
-    // エントリーポイント判定
-    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
-      tags.push('Entry Point');
-    } else if (fileName.includes('router') || fileName.includes('routes') || fileName.includes('server')) {
-      tags.push('Core Module');
-    }
-    
-    // import集中度判定
-    if (file.structure.exports.length >= 10) {
-      tags.push('Highly Imported');
-    }
-    
-    // ファイルサイズ判定
-    const lines = file.lines;
-    if (lines >= 300 && lines <= 800) {
-      tags.push('Optimal Size');
-    } else if (lines > 1500) {
-      tags.push('Large File');
-    }
-    
-    // 技術的中核判定
-    if (fileName.includes('component') || fileName.includes('components')) {
-      tags.push('Component');
-    } else if (fileName.includes('router') || fileName.includes('routes')) {
-      tags.push('Router Core');
-    } else if (fileName.includes('controller') || fileName.includes('controllers')) {
-      tags.push('Controller');
-    } else if (fileName.includes('service') || fileName.includes('services')) {
-      tags.push('Service Layer');
-    } else if (fileName.includes('config') || fileName.includes('configuration')) {
-      tags.push('Configuration');
-    }
-    
-    // リスク判定
-    if (file.blackboxRisk && file.blackboxRisk.score > 70) {
-      tags.push('High Risk');
-    }
-    
-    // 最大2-3タグに制限
-    return tags.slice(0, 3);
-  };
-
-  const getReadingOrder = () => {
-    if (singleFile) {
-      return [{
-        file: {
-          fileName: singleFile.fileName || '',
-          language: singleFile.language || '',
-          technologies: singleFile.technologies || [],
-          size: singleFile.size || 0,
-          lines: singleFile.lines || 0,
-          structure: singleFile.structure || { functions: [], classes: [], imports: [], exports: [] },
-          blackboxRisk: singleFile.blackboxRisk
-        },
-        score: 100,
-        reasons: ['Single File']
-      }];
-    }
-    
-    if (!files) return [];
-    
-    const scoredFiles = files.map(file => ({
-      file,
-      score: calculateImportanceScore(file),
-      reasons: getReasonTags(file, calculateImportanceScore(file))
-    }));
-    
-    return scoredFiles.sort((a, b) => b.score - a.score).slice(0, 3); // Top 3に制限
-  };
-
-  const readingOrder = getReadingOrder();
-
-  if (readingOrder.length === 0) return null;
-
-  return (
-    <div className="reading-order-guide" style={{
-      backgroundColor: '#f8f9fa',
-      padding: '24px',
-      borderRadius: '12px',
-      marginBottom: '24px',
-      border: '2px solid #e3f2fd'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', color: '#1976d2', fontSize: '20px', fontWeight: '600' }}>
-        🧭 Recommended Reading Order
-      </h3>
-      
-      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
-        💡 この順番で読むと、プロジェクトの理解が最も速くなります。各ファイルの重要度と理由を示しています。
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {readingOrder.map((item, index) => (
-          <div 
-            key={item.file.fileName}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-              padding: '16px',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              border: '1px solid #e0e0e0',
-              transition: 'all 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            {/* 順位番号 */}
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              backgroundColor: index === 0 ? '#4caf50' : index === 1 ? '#ff9800' : index === 2 ? '#2196f3' : '#9e9e9e',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              fontSize: '16px',
-              flexShrink: 0
-            }}>
-              {index + 1}
-            </div>
-            
-            {/* ファイル情報 */}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '4px', color: '#262626' }}>
-                📄 {item.file.fileName}
-              </div>
-              <div style={{ fontSize: '14px', color: '#666', marginBottom: '6px' }}>
-                {item.file.language} • {item.file.lines.toLocaleString()}行 • {item.file.technologies.slice(0, 3).join(', ')}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {item.reasons.map((reason, reasonIndex) => (
-                  <span 
-                    key={reasonIndex}
-                    style={{
-                      backgroundColor: '#f0f0f0',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      color: '#595959',
-                      border: '1px solid #d0d0d0'
-                    }}
-                  >
-                    {reason}
-                  </span>
-                ))}
-              </div>
-            </div>
-            
-            {/* 重要度スコア */}
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>重要度</div>
-              <div style={{
-                fontSize: '20px',
-                fontWeight: 'bold',
-                color: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e'
-              }}>
-                {Math.round(item.score)}
-              </div>
-              <div style={{
-                width: '60px',
-                height: '4px',
-                backgroundColor: '#e0e0e0',
-                borderRadius: '2px',
-                marginTop: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${item.score}%`,
-                  height: '100%',
-                  backgroundColor: item.score > 70 ? '#4caf50' : item.score > 40 ? '#ff9800' : '#9e9e9e',
-                  borderRadius: '2px'
-                }} />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* 読解のヒント */}
-      <div style={{
-        marginTop: '20px',
-        padding: '16px',
-        backgroundColor: '#e3f2fd',
-        borderRadius: '8px',
-        fontSize: '14px',
-        color: '#1976d2',
-        lineHeight: '1.4'
-      }}>
-        <strong>💡 読解のヒント:</strong> 
-        {readingOrder[0].reasons.some(r => r.includes('Entry Point')) 
-          ? ' まずエントリーポイントから読むことで、プロジェクト全体の構造が理解しやすくなります。'
-          : readingOrder[0].reasons.some(r => r.includes('Core') || r.includes('Router') || r.includes('Controller'))
-          ? ' 最初のファイルはプロジェクトの核となるモジュールです。ここから理解を始めるのが効率的です。'
-          : ' 最初のファイルはプロジェクトの重要な要素です。ここから理解を始めることで、全体像が掴みやすくなります。'
-        }
-        <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-          📊 重要度スコア: エントリーポイント(40点) + import集中度(25点) + ファイルサイズ(15点) + 技術シグナル(15点) + リスク(5点) = 最大100点
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // --- 改善提案型定義 ---
 interface Suggestion {
@@ -2037,11 +1756,13 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
   };
   
   // Quick Fixコピー機能
+  const [promptCopied, setPromptCopied] = useState(false);
+  
   const handleCopyPrompt = (filePath: string, issues: string[], fixes: FixSuggestion[]) => {
     const prompt = generateRefactorPrompt(filePath, issues, fixes);
     navigator.clipboard.writeText(prompt).then(() => {
-      // コピー成功のフィードバック（簡易版）
-      alert('リファクタリングプロンプトをコピーしました！');
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
     });
   };
   
@@ -2154,7 +1875,7 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   <button
                     onClick={() => handleCopyPrompt(file.path, file.issues, file.fixes)}
                     style={{
-                      backgroundColor: '#1890ff',
+                      backgroundColor: promptCopied ? '#52c41a' : '#1890ff',
                       color: 'white',
                       border: 'none',
                       borderRadius: '6px',
@@ -2163,10 +1884,10 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       cursor: 'pointer',
                       transition: 'background-color 0.2s'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#40a9ff'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1890ff'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = promptCopied ? '#73d13d' : '#40a9ff'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = promptCopied ? '#52c41a' : '#1890ff'}
                   >
-                    📋 Copy refactor prompt
+                    {promptCopied ? '✅ コピーしました' : '📋 Copy refactor prompt'}
                   </button>
                 </div>
               </div>
@@ -4829,12 +4550,6 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   {history.length >= 2 && (
                     <ComparisonView history={history} />
                   )}
-
-                  {/* 読む順番ガイド */}
-                  <ReadingOrderGuide 
-                    files={analysisResult.files} 
-                    singleFile={analysisResult.type === 'single' ? analysisResult : undefined} 
-                  />
 
                   {/* 改善提案 */}
                   <ImprovementSuggestions analysis={analysisResult} />
