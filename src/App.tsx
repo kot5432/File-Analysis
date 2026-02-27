@@ -1876,18 +1876,16 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                     onClick={() => handleCopyPrompt(file.path, file.issues, file.fixes)}
                     style={{
                       backgroundColor: promptCopied ? '#52c41a' : '#1890ff',
-                      color: 'white',
+                      color: '#fff',
                       border: 'none',
-                      borderRadius: '6px',
-                      padding: '8px 16px',
-                      fontSize: '12px',
+                      padding: '6px 12px',
+                      borderRadius: '4px',
                       cursor: 'pointer',
-                      transition: 'background-color 0.2s'
+                      fontSize: '0.85rem',
+                      transition: 'background-color 0.3s'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = promptCopied ? '#73d13d' : '#40a9ff'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = promptCopied ? '#52c41a' : '#1890ff'}
                   >
-                    {promptCopied ? '✅ コピーしました' : '📋 Copy refactor prompt'}
+                    {promptCopied ? 'コピーしました！' : 'リファクタリングをコピー'}
                   </button>
                 </div>
               </div>
