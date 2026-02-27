@@ -2231,23 +2231,6 @@ const getHealthLevel = (score: number): { level: string; color: string; icon: st
   return { level: 'CRITICAL', color: '#ff4d4f', icon: '🔴' };
 };
 
-// --- 指標レベル分類 ---
-const getMetricLevel = (value: number, type: 'risk' | 'comment' | 'ai'): { level: string; color: string } => {
-  if (type === 'risk') {
-    if (value >= 70) return { level: 'HIGH', color: '#ff4d4f' };
-    if (value >= 40) return { level: 'MEDIUM', color: '#faad14' };
-    return { level: 'LOW', color: '#52c41a' };
-  } else if (type === 'comment') {
-    if (value >= 20) return { level: 'GOOD', color: '#52c41a' };
-    if (value >= 10) return { level: 'FAIR', color: '#faad14' };
-    return { level: 'POOR', color: '#ff4d4f' };
-  } else { // ai
-    if (value >= 70) return { level: 'HIGH', color: '#ff4d4f' };
-    if (value >= 40) return { level: 'MEDIUM', color: '#faad14' };
-    return { level: 'LOW', color: '#52c41a' };
-  }
-};
-
 // --- プロジェクト健全性スコア計算エンジン ---
 const calculateProjectHealthScore = (analysis: AnalysisResult): ProjectHealthScore | null => {
   if (analysis.type !== 'zip' || !analysis.files || analysis.files.length === 0) {
@@ -2315,7 +2298,7 @@ const calculateProjectHealthScore = (analysis: AnalysisResult): ProjectHealthSco
   ));
   
   // レベル判定
-  const { level, color, icon } = getHealthLevel(healthScore);
+  const { level } = getHealthLevel(healthScore);
   
   // 推奨事項生成
   const recommendations: string[] = [];
@@ -2352,188 +2335,11 @@ const calculateProjectHealthScore = (analysis: AnalysisResult): ProjectHealthSco
   };
 };
 
-// --- 改善インパクト予測（神機能）---
-const calculateImprovementImpact = (health: ProjectHealthScore, fileRisks: FileRiskWithFixes[]): { current: number; improved: number; gain: number } => {
-  if (!fileRisks || fileRisks.length === 0) {
-    return { current: health.score, improved: health.score, gain: 0 };
-  }
-  
-  // TOP3ファイルの改善によるインパクトを計算
-  const top3Files = fileRisks.slice(0, 3);
-  const totalFiles = fileRisks.length;
-  
-  // 簡易的なインパクト計算
-  // TOP3ファイルのリスクを平均的に50%改善すると仮定
-  const currentAvgRisk = health.breakdown.avgRiskScore;
-  const top3AvgRisk = top3Files.reduce((sum, file) => sum + file.riskScore, 0) / top3Files.length;
-  const otherAvgRisk = (currentAvgRisk * totalFiles - top3AvgRisk * 3) / (totalFiles - 3);
-  
-  const improvedAvgRisk = (top3AvgRisk * 0.5 * 3 + otherAvgRisk * (totalFiles - 3)) / totalFiles;
-  const riskImprovement = currentAvgRisk - improvedAvgRisk;
-  
-  // リスク改善分をスコアに反映
-  const scoreGain = Math.round(riskImprovement * 0.35); // リスク重み35%
-  const improvedScore = Math.min(100, health.score + scoreGain);
-  
-  return {
-    current: health.score,
-    improved: improvedScore,
-    gain: scoreGain
-  };
-};
+// --- 改善インパクト予測（削除）---
+// calculateImprovementImpactはUIに統合されているため未使用
 
-// --- プロジェクト健全性スコア表示コンポーネント ---
-const ProjectHealthScoreView: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
-  const health = calculateProjectHealthScore(analysis);
-  
-  if (!health) {
-    return null;
-  }
-  
-  const { level, color, icon } = getHealthLevel(health.score);
-  
-  // Breakdownのメトリックレベル
-  const riskLevel = getMetricLevel(health.breakdown.avgRiskScore, 'risk');
-  const commentLevel = getMetricLevel(health.breakdown.avgCommentRatio, 'comment');
-  const aiLevel = getMetricLevel(health.breakdown.avgAiLikelihood, 'ai');
-  
-  // 改善インパクト予測
-  const fileRisks = generateFileRisksWithFixes(analysis);
-  const impact = calculateImprovementImpact(health, fileRisks);
-  
-  return (
-    <div style={{
-      backgroundColor: '#fafafa',
-      border: `2px solid ${color}`,
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px'
-    }}>
-      {/* メインスコア表示 */}
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
-          🏥 Project Health Score
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-          <div style={{
-            fontSize: '48px',
-            fontWeight: 'bold',
-            color: color
-          }}>
-            {health.score}
-          </div>
-          <div style={{ fontSize: '24px', color: '#666' }}>/ 100</div>
-          <div style={{
-            backgroundColor: color,
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            {icon} {level}
-          </div>
-        </div>
-      </div>
-      
-      {/* Breakdownパネル */}
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
-          📊 Health Breakdown
-        </h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Avg Risk:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: riskLevel.color }}>
-              {riskLevel.level} ({health.breakdown.avgRiskScore})
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>High Risk Files:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#ff4d4f' }}>
-              {health.breakdown.highRiskFileRatio}%
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Complexity:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: health.breakdown.avgNestingDepth >= 4 ? '#ff4d4f' : '#52c41a' }}>
-              {health.breakdown.avgNestingDepth >= 4 ? 'HIGH' : 'MEDIUM'} ({health.breakdown.avgNestingDepth})
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Documentation:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: commentLevel.color }}>
-              {commentLevel.level} ({health.breakdown.avgCommentRatio}%)
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>AI Dependency:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: aiLevel.color }}>
-              {aiLevel.level} ({health.breakdown.avgAiLikelihood}%)
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* 改善インパクト予測 */}
-      {impact && impact.gain > 0 && (
-        <div style={{
-          backgroundColor: '#e6f7ff',
-          border: '1px solid #91d5ff',
-          borderRadius: '8px',
-          padding: '16px',
-          marginBottom: '20px'
-        }}>
-          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#0958d9' }}>
-            ⭐ 改善インパクト予測
-          </h4>
-          <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>
-            If top 3 issues fixed:
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '16px', color: '#666' }}>
-              Health Score: {impact.current} → 
-            </span>
-            <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#0958d9' }}>
-              {impact.improved}
-            </span>
-            <span style={{ fontSize: '16px', color: '#52c41a', fontWeight: 'bold' }}>
-              (+{impact.gain})
-            </span>
-          </div>
-        </div>
-      )}
-      
-      {/* 推奨事項 */}
-      <div style={{
-        backgroundColor: '#fffbe6',
-        border: '1px solid #ffe58f',
-        borderRadius: '8px',
-        padding: '16px'
-      }}>
-        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#d46b08' }}>
-          💡 推奨事項
-        </h4>
-        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-          {health.recommendations.map((rec, index) => (
-            <li key={index} style={{ fontSize: '13px', color: '#666', marginBottom: '4px', lineHeight: '1.4' }}>
-              {rec}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-};
+// --- プロジェクト健全性スコア計算関数（削除）---
+// ProjectHealthScoreViewはUIに統合されているため、このコンポーネントは未使用
 
 // --- 技術的負債ヒートマップ型定義 ---
 interface TechDebtFile {
@@ -3297,7 +3103,7 @@ const calculateBlackBoxIndex = (analysis: AnalysisResult): BlackBoxIndex | null 
   }
   
   // レベル判定
-  const { level, color, icon, status } = getBBILevel(bbiScore);
+  const { level } = getBBILevel(bbiScore);
   
   return {
     score: Math.round(bbiScore),
@@ -3313,208 +3119,12 @@ const calculateBlackBoxIndex = (analysis: AnalysisResult): BlackBoxIndex | null 
   };
 };
 
-// --- 履歴との連携（激強）---
-const getBBIHistory = (currentBBI: BlackBoxIndex, history: AnalysisHistory[]): { previous: number; change: number; improved: boolean } => {
-  // 簡易的な履歴比較（最新の前回との比較）
-  if (history.length < 2) {
-    return { previous: 0, change: 0, improved: false };
-  }
-  
-  // 前回のBBIを計算（簡易版）
-  const previousHistory = history[history.length - 2];
-  const previousBBI = calculateBlackBoxIndex(previousHistory.fullResult);
-  
-  if (!previousBBI) {
-    return { previous: 0, change: 0, improved: false };
-  }
-  
-  const change = currentBBI.score - previousBBI.score;
-  return {
-    previous: previousBBI.score,
-    change: Math.abs(change),
-    improved: change < 0 // スコアが下がった方が改善
-  };
-};
+// --- 履歴との連携（削除）---
+// getBBIHistoryはUIに統合されているため未使用
 
 // --- ブラックボックス指数表示コンポーネント ---
-const BlackBoxIndexView: React.FC<{ analysis: AnalysisResult; history: AnalysisHistory[] }> = ({ analysis, history }) => {
-  const bbi = calculateBlackBoxIndex(analysis);
-  const historyData = bbi ? getBBIHistory(bbi, history) : null;
-  
-  if (!bbi) {
-    return null;
-  }
-  
-  const { level, color, icon, status } = getBBILevel(bbi.score);
-  
-  return (
-    <div style={{
-      backgroundColor: '#fafafa',
-      border: `2px solid ${color}`,
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
-        📊 ブラックボックス指数（BBI）
-      </h3>
-      
-      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
-        💡 プロジェクト全体のブラックボックス度を表す総合評価。0に近いほど健全です。
-      </div>
-      
-      {/* プロジェクト健康ゲージ */}
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '20px',
-        marginBottom: '20px',
-        textAlign: 'center'
-      }}>
-        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#262626' }}>
-          Black Box Index
-        </h4>
-        
-        {/* メインスコア表示 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '16px' }}>
-          <div style={{
-            fontSize: '48px',
-            fontWeight: 'bold',
-            color: color
-          }}>
-            {bbi.score}
-          </div>
-          <div style={{ fontSize: '24px', color: '#666' }}>/ 100</div>
-          <div style={{
-            backgroundColor: color,
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            {icon} {status}
-          </div>
-        </div>
-        
-        {/* ゲージ表示（RiskGaugeを再利用） */}
-        <div style={{ width: '100%', maxWidth: '300px', margin: '0 auto 16px' }}>
-          <div style={{
-            width: '100%',
-            height: '20px',
-            backgroundColor: '#e5e7eb',
-            borderRadius: '10px',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            <div style={{
-              width: `${bbi.score}%`,
-              height: '100%',
-              backgroundColor: color,
-              transition: 'width 0.3s ease'
-            }} />
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              color: bbi.score > 50 ? 'white' : '#374151'
-            }}>
-              {bbi.score}%
-            </div>
-          </div>
-        </div>
-        
-        {/* 履歴比較 */}
-        {historyData && historyData.previous > 0 && (
-          <div style={{
-            backgroundColor: historyData.improved ? '#dcfce7' : '#fee2e2',
-            border: `1px solid ${historyData.improved ? '#22c55e' : '#ef4444'}`,
-            borderRadius: '6px',
-            padding: '8px 12px',
-            display: 'inline-block',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            color: historyData.improved ? '#166534' : '#991b1b'
-          }}>
-            Previous: {historyData.previous} → Current: {bbi.score} 
-            {historyData.improved ? ' ▲' : ' ▼'} {historyData.change}
-          </div>
-        )}
-      </div>
-      
-      {/* サブ指標内訳 */}
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
-          📈 Breakdown
-        </h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Avg Risk:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.avgRisk >= 60 ? '#ef4444' : '#22c55e' }}>
-              {bbi.breakdown.avgRisk}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>High Risk Files:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.highRiskRatio >= 30 ? '#ef4444' : '#22c55e' }}>
-              {bbi.breakdown.highRiskRatio}%
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Deep Nesting:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.avgNestingDepth >= 50 ? '#ef4444' : '#22c55e' }}>
-              {bbi.breakdown.avgNestingDepth}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>Low Comments:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.lowCommentRatio >= 40 ? '#ef4444' : '#22c55e' }}>
-              {bbi.breakdown.lowCommentRatio}%
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#666' }}>AI Suspicious:</span>
-            <span style={{ fontSize: '13px', fontWeight: 'bold', color: bbi.breakdown.aiSuspiciousRatio >= 20 ? '#ef4444' : '#22c55e' }}>
-              {bbi.breakdown.aiSuspiciousRatio}%
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* 解釈テキスト */}
-      <div style={{
-        backgroundColor: '#f3f4f6',
-        border: '1px solid #d1d5db',
-        borderRadius: '8px',
-        padding: '16px'
-      }}>
-        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
-          🔍 解釈
-        </h4>
-        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-          {bbi.interpretation.map((text, index) => (
-            <li key={index} style={{ fontSize: '13px', color: '#374151', marginBottom: '4px', lineHeight: '1.4' }}>
-              {text}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-};
+// --- ブラックボックス指数計算関数（削除）---
+// BlackBoxIndexViewはUIに統合されているため、このコンポーネントは未使用
 
 // --- 改善アクション型定義 ---
 interface ImprovementAction {
@@ -5206,7 +4816,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   {(() => {
                     const bbi = calculateBlackBoxIndex(analysisResult);
                     if (!bbi) return null;
-                    const { level, color, icon, status } = getBBILevel(bbi.score);
+                    const { level, color } = getBBILevel(bbi.score);
                     return (
                       <div style={{
                         backgroundColor: 'white',
@@ -5220,7 +4830,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                           {bbi.score}
                         </div>
                         <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
-                          {icon} {status}
+                          {level}
                         </div>
                       </div>
                     );
@@ -5230,7 +4840,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   {(() => {
                     const health = calculateProjectHealthScore(analysisResult);
                     if (!health) return null;
-                    const { level, color, icon } = getHealthLevel(health.score);
+                    const { level, color } = getHealthLevel(health.score);
                     return (
                       <div style={{
                         backgroundColor: 'white',
@@ -5244,7 +4854,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                           {health.score}
                         </div>
                         <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
-                          {icon} {level}
+                          {level}
                         </div>
                       </div>
                     );
