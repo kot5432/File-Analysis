@@ -1946,11 +1946,6 @@ const getRiskLevel = (score: number): 'low' | 'medium' | 'high' => {
   return 'low';
 };
 
-// --- ファイルリスクデータ生成（旧バージョン互換性）---
-const generateFileRisks = (analysis: AnalysisResult): FileRiskWithFixes[] => {
-  return generateFileRisksWithFixes(analysis);
-};
-
 // --- ヒートマップ表示コンポーネント（Fix提案付き）---
 const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
   const fileRisks = generateFileRisksWithFixes(analysis);
@@ -1967,13 +1962,6 @@ const RiskHeatmapWithFixes: React.FC<{ analysis: AnalysisResult }> = ({ analysis
     high: { color: '#ff4d4f', bgColor: '#fff2f0', icon: '🔴' },
     medium: { color: '#faad14', bgColor: '#fffbe6', icon: '🟠' },
     low: { color: '#52c41a', bgColor: '#f6ffed', icon: '🟢' }
-  };
-  
-  // 優先度の色
-  const priorityConfig = {
-    high: { color: '#ff4d4f', label: 'HIGH' },
-    medium: { color: '#faad14', label: 'MED' },
-    low: { color: '#52c41a', label: 'LOW' }
   };
   
   // Quick Fixコピー機能
@@ -2394,11 +2382,9 @@ const calculateImprovementImpact = (health: ProjectHealthScore, fileRisks: FileR
   };
 };
 
-// --- プロジェクト健全性表示コンポーネント ---
+// --- プロジェクト健全性スコア表示コンポーネント ---
 const ProjectHealthScoreView: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
   const health = calculateProjectHealthScore(analysis);
-  const fileRisks = generateFileRisksWithFixes(analysis);
-  const impact = health ? calculateImprovementImpact(health, fileRisks) : null;
   
   if (!health) {
     return null;
@@ -2410,6 +2396,10 @@ const ProjectHealthScoreView: React.FC<{ analysis: AnalysisResult }> = ({ analys
   const riskLevel = getMetricLevel(health.breakdown.avgRiskScore, 'risk');
   const commentLevel = getMetricLevel(health.breakdown.avgCommentRatio, 'comment');
   const aiLevel = getMetricLevel(health.breakdown.avgAiLikelihood, 'ai');
+  
+  // 改善インパクト予測
+  const fileRisks = generateFileRisksWithFixes(analysis);
+  const impact = calculateImprovementImpact(health, fileRisks);
   
   return (
     <div style={{
