@@ -2525,6 +2525,27 @@ const TechDebtHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) =
         💡 プロジェクト全体の技術的負債分布を可視化。赤いファイルから優先的に改善しましょう。
       </div>
       
+      {/* ⚠️ Risk Concentration バナー */}
+      <div style={{
+        backgroundColor: concentration.concentration === 'HIGH' ? '#fee2e2' : 
+                        concentration.concentration === 'MEDIUM' ? '#fef3c7' : '#dcfce7',
+        border: `1px solid ${concentration.concentration === 'HIGH' ? '#ef4444' : 
+                              concentration.concentration === 'MEDIUM' ? '#eab308' : '#22c55e'}`,
+        borderRadius: '8px',
+        padding: '12px 16px',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#666' }}>
+          ⚠️ Risk Concentration: {concentration.concentration}
+        </span>
+        <span style={{ fontSize: '13px', color: '#666' }}>
+          Top 20% files = {concentration.percentage}% of total risk
+        </span>
+      </div>
+      
       {/* 集約サマリー */}
       <div style={{
         backgroundColor: 'white',
@@ -2971,9 +2992,17 @@ const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analys
                       flexWrap: 'wrap'
                     }}>
                       <span>Priority: <strong style={{ color: color.text }}>{priority.priorityScore}</strong></span>
-                      <span>Risk: {priority.riskScore}</span>
-                      <span>Impact: {priority.impactScore}</span>
-                      <span>Effort: {priority.effortScore}</span>
+                      <span>Effort: ~{Math.round(priority.effortScore / 20)}h</span>
+                    </div>
+                    
+                    {/* Whyを1行に圧縮 */}
+                    <div style={{ 
+                      fontSize: '11px', 
+                      color: '#666', 
+                      marginBottom: '8px',
+                      fontStyle: 'italic'
+                    }}>
+                      Why: {priority.reasons.slice(0, 1).join('')}
                     </div>
                     
                     {/* 理由表示 */}
@@ -5041,10 +5070,20 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
 
         {analysisResult && (
           <div className="analysis-result">
-            {/* Next Best Action 固定ウィジェット */}
-            <NextBestActionWidget analysis={analysisResult} />
+            {/* 🚨 Next Best Action - 最上部固定 */}
+            <div style={{
+              position: 'sticky',
+              top: '0',
+              zIndex: 100,
+              backgroundColor: '#fff',
+              borderBottom: '3px solid #ef4444',
+              marginBottom: '24px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}>
+              <NextBestActionWidget analysis={analysisResult} />
+            </div>
 
-            {/* Level 1: 一目サマリー（最上部） */}
+            {/* Level 1: プロジェクト概要（3秒サマリー） */}
             <div style={{ marginBottom: '20px' }}>
               <div 
                 style={{
@@ -5060,7 +5099,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                 onClick={() => toggleSection('level1')}
               >
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
-                  📊 プロジェクト概要（3秒で理解）
+                  📊 プロジェクト概要
                 </h3>
                 <span style={{ fontSize: '14px', color: '#666' }}>
                   {expandedSections.level1 ? '▼' : '▶'}
@@ -5077,7 +5116,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px'
                 }}>
-                  {/* BBI */}
+                  {/* BBIカード */}
                   {(() => {
                     const bbi = calculateBlackBoxIndex(analysisResult);
                     if (!bbi) return null;
@@ -5094,27 +5133,17 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {bbi.score}
                         </div>
-                        <div style={{ fontSize: '11px', color, fontWeight: 'bold', marginBottom: '8px' }}>
-                          {level}
+                        <div style={{ fontSize: '11px', color, fontWeight: 'bold', marginBottom: '4px' }}>
+                          {level === 'CRITICAL' ? '🔴 CRITICAL' : level === 'WARNING' ? '⚠️ WARNING' : '✅ HEALTHY'}
                         </div>
-                        
-                        {/* 寄与度内訳 */}
-                        <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
-                          内訳 (上位3要素):
+                        <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
+                          {bbi.interpretation[0] || 'Main issue: 高リスクファイル集中'}
                         </div>
-                        {Object.entries(bbi.contributions)
-                          .sort(([, a], [, b]) => b.contribution - a.contribution)
-                          .slice(0, 3)
-                          .map(([key, contrib]) => (
-                            <div key={key} style={{ fontSize: '9px', color: '#888', marginBottom: '2px' }}>
-                              {contrib.description}: +{contrib.contribution}点 ({contrib.weight}%)
-                            </div>
-                          ))}
                       </div>
                     );
                   })()}
                   
-                  {/* プロジェクト健全性 */}
+                  {/* Health Scoreカード */}
                   {(() => {
                     const health = calculateProjectHealthScore(analysisResult);
                     if (!health) return null;
@@ -5131,17 +5160,23 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color, marginBottom: '4px' }}>
                           {health.score}
                         </div>
-                        <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
-                          {level}
+                        <div style={{ fontSize: '11px', color: color, fontWeight: 'bold', marginBottom: '4px' }}>
+                          {level === 'POOR' ? '🔴 POOR' : level === 'FAIR' ? '🟡 FAIR' : level === 'GOOD' ? '🟢 GOOD' : '✅ EXCELLENT'}
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#666' }}>
+                          Weak: {health.breakdown.avgCommentRatio < 50 ? 'Documentation' : health.breakdown.avgRiskScore > 70 ? 'Risk Score' : 'Code Quality'}
                         </div>
                       </div>
                     );
                   })()}
                   
-                  {/* High Riskファイル数 */}
+                  {/* High Risk Filesカード */}
                   {(() => {
                     if (analysisResult.type !== 'zip' || !analysisResult.files) return null;
                     const highRiskCount = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70).length;
+                    const topRiskFile = analysisResult.files
+                      .filter(f => calculateFileRiskScore(f) >= 70)
+                      .sort((a, b) => calculateFileRiskScore(b) - calculateFileRiskScore(a))[0];
                     return (
                       <div style={{
                         backgroundColor: 'white',
@@ -5154,16 +5189,20 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444', marginBottom: '4px' }}>
                           {highRiskCount}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold' }}>
-                          🔴 Critical
+                        <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginBottom: '4px' }}>
+                          🔴 Attention
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#666' }}>
+                          Top: {topRiskFile?.fileName.split('/').pop() || 'Unknown'}
                         </div>
                       </div>
                     );
                   })()}
                   
-                  {/* Critical Actions */}
+                  {/* Critical Actionsカード */}
                   {(() => {
                     const actionPlan = generateProjectActionPlan(analysisResult);
+                    const totalHours = actionPlan.critical.length * 2 + actionPlan.high.length * 1.5;
                     return (
                       <div style={{
                         backgroundColor: 'white',
@@ -5176,8 +5215,11 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f97316', marginBottom: '4px' }}>
                           {actionPlan.summary.critical}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#f97316', fontWeight: 'bold' }}>
-                          ⚠️ Urgent
+                        <div style={{ fontSize: '11px', color: '#f97316', fontWeight: 'bold', marginBottom: '4px' }}>
+                          🚨 Urgent
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#666' }}>
+                          Est: ~{Math.round(totalHours)} hours
                         </div>
                       </div>
                     );
@@ -5240,6 +5282,26 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
               >
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
                   📖 詳細分析と理解支援
+                  {(() => {
+                    if (analysisResult.type !== 'zip' || !analysisResult.files) return '';
+                    const criticalCount = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70).length;
+                    if (criticalCount > 0 && !expandedSections.level3) {
+                      return (
+                        <span style={{ 
+                          marginLeft: '8px', 
+                          fontSize: '12px', 
+                          color: '#ef4444',
+                          backgroundColor: '#fee2e2',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 'bold'
+                        }}>
+                          ⚠️ {criticalCount} critical files hidden
+                        </span>
+                      );
+                    }
+                    return '';
+                  })()}
                 </h3>
                 <span style={{ fontSize: '14px', color: '#666' }}>
                   {expandedSections.level3 ? '▼' : '▶'}
