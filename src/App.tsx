@@ -30,7 +30,7 @@ interface RiskBreakdown {
 
 interface BlackboxRisk {
   score: number;
-  level: 'LOW' | 'MEDIUM' | 'HIGH';
+  level: '低' | '中' | '高';
   breakdown: RiskBreakdown;
   nestingDepth?: { maxDepth: number; riskScore: number };
   commentRatio?: { commentRatio: number; riskScore: number; commentLines: number; totalLines: number };
@@ -324,10 +324,10 @@ const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ co
     const isMicroservice = content.includes('microservice') || content.includes('service') || content.includes('controller');
     
     return {
-      architecture: isSPA ? 'SPA (Single Page Application)' : isSSR ? 'SSR (Server Side Rendering)' : 'Multi Page Application',
-      backend: isAPI ? 'REST API' : isMicroservice ? 'Microservices' : 'Monolithic',
-      frontend: isSPA ? 'Component-based' : 'Traditional',
-      dataFlow: categories['状態管理'].length > 0 ? 'State Management' : 'Props/Events'
+      architecture: isSPA ? 'SPA（シングルページアプリケーション）' : isSSR ? 'SSR（サーバーサイドレンダリング）' : 'マルチページアプリケーション',
+      backend: isAPI ? 'REST API' : isMicroservice ? 'マイクロサービス' : 'モノリシック',
+      frontend: isSPA ? 'コンポーネントベース' : 'トラディショナル',
+      dataFlow: categories['状態管理'].length > 0 ? '状態管理' : 'プロパティ/イベント'
     };
   };
   
@@ -485,49 +485,49 @@ const detectProjectType = (result: AnalysisResult, content?: string): {
       if (technologies.includes('Next.js')) {
         projectType = 'Next.js App';
         confidence = 0.85;
-        reasons.push('Next.js framework detected');
+        reasons.push('Next.jsフレームワークを検出');
       } else if (content && (content.includes('ReactDOM.render') || content.includes('createRoot'))) {
         projectType = 'React SPA';
         confidence = 0.9;
-        reasons.push('React detected');
-        reasons.push('ReactDOM entry point');
+        reasons.push('Reactを検出');
+        reasons.push('ReactDOMエントリーポイント');
         if (content.includes('getServerSideProps') || content.includes('getStaticProps')) {
-          projectType = 'React SSR App';
-          reasons.push('SSR features detected');
+          projectType = 'React SSRアプリ';
+          reasons.push('SSR機能を検出');
         }
       } else {
         projectType = 'React App';
         confidence = 0.75;
-        reasons.push('React detected');
+        reasons.push('Reactを検出');
       }
     } else if (technologies.includes('Vue.js')) {
       if (technologies.includes('Nuxt.js')) {
         projectType = 'Nuxt.js App';
         confidence = 0.85;
-        reasons.push('Nuxt.js framework detected');
+        reasons.push('Nuxt.jsフレームワークを検出');
       } else if (content && (content.includes('Vue.createApp') || content.includes('createApp'))) {
         projectType = 'Vue.js SPA';
         confidence = 0.9;
-        reasons.push('Vue.js detected');
-        reasons.push('Vue.createApp entry point');
+        reasons.push('Vue.jsを検出');
+        reasons.push('Vue.createAppエントリーポイント');
       } else {
         projectType = 'Vue.js App';
         confidence = 0.75;
-        reasons.push('Vue.js detected');
+        reasons.push('Vue.jsを検出');
       }
     } else if (technologies.includes('Angular')) {
       projectType = 'Angular App';
       confidence = 0.85;
-      reasons.push('Angular framework detected');
+      reasons.push('Angularフレームワークを検出');
     } else if (technologies.includes('Svelte')) {
       if (technologies.includes('SvelteKit')) {
         projectType = 'SvelteKit App';
         confidence = 0.85;
-        reasons.push('SvelteKit framework detected');
+        reasons.push('SvelteKitフレームワークを検出');
       } else {
         projectType = 'Svelte App';
         confidence = 0.75;
-        reasons.push('Svelte detected');
+        reasons.push('Svelteを検出');
       }
     }
     
@@ -646,11 +646,11 @@ const detectProjectType = (result: AnalysisResult, content?: string): {
     confidence = 0.5;
     
     if (result.type === 'zip' && result.totalFiles && result.totalFiles > 1) {
-      projectType = 'Multi-language Project';
-      reasons.push('Multiple files detected');
+      projectType = '多言語プロジェクト';
+      reasons.push('複数ファイルを検出');
     } else {
-      projectType = 'Single File';
-      reasons.push('Single file project');
+      projectType = '単一ファイル';
+      reasons.push('単一ファイルプロジェクト');
     }
   }
 
@@ -666,14 +666,14 @@ const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string; c
 
   const getRiskLevel = () => {
     const riskScore = result.blackboxRisk?.score || 0;
-    if (riskScore >= 70) return { level: 'HIGH', color: '#ff4d4f', bgColor: '#fff2f0', borderColor: '#ffccc7' };
-    if (riskScore >= 40) return { level: 'MEDIUM', color: '#faad14', bgColor: '#fffbe6', borderColor: '#ffe58f' };
-    return { level: 'LOW', color: '#52c41a', bgColor: '#f6ffed', borderColor: '#b7eb8f' };
+    if (riskScore >= 70) return { level: '高', color: '#ff4d4f', bgColor: '#fff2f0', borderColor: '#ffccc7' };
+    if (riskScore >= 40) return { level: '中', color: '#faad14', bgColor: '#fffbe6', borderColor: '#ffe58f' };
+    return { level: '低', color: '#52c41a', bgColor: '#f6ffed', borderColor: '#b7eb8f' };
   };
 
   const getAILevel = () => {
     const aiLikelihood = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
-    const level = aiLikelihood >= 70 ? 'HIGH' : aiLikelihood >= 40 ? 'MEDIUM' : 'LOW';
+    const level = aiLikelihood >= 70 ? '高' : aiLikelihood >= 40 ? '中' : '低';
     const color = aiLikelihood >= 70 ? '#ff4d4f' : aiLikelihood >= 40 ? '#faad14' : '#52c41a';
     const bgColor = aiLikelihood >= 70 ? '#fff2f0' : aiLikelihood >= 40 ? '#fffbe6' : '#f6ffed';
     const borderColor = aiLikelihood >= 70 ? '#ffccc7' : aiLikelihood >= 40 ? '#ffe58f' : '#b7eb8f';
@@ -2413,324 +2413,6 @@ const calculateProjectHealthScore = (analysis: AnalysisResult): ProjectHealthSco
 // --- プロジェクト健全性スコア計算関数（削除）---
 // ProjectHealthScoreViewはUIに統合されているため、このコンポーネントは未使用
 
-// --- 技術的負債ヒートマップ型定義 ---
-interface TechDebtFile {
-  path: string;
-  riskScore: number;
-  heatLevel: 'low' | 'medium' | 'high';
-  lines: number;
-  language: string;
-  size: number;
-}
-
-// --- ヒートレベル計算 ---
-const calculateHeatLevel = (riskScore: number): 'low' | 'medium' | 'high' => {
-  if (riskScore >= 70) return 'high';
-  if (riskScore >= 40) return 'medium';
-  return 'low';
-};
-
-// --- 技術的負債データ生成 ---
-const generateTechDebtData = (analysis: AnalysisResult): TechDebtFile[] => {
-  if (analysis.type !== 'zip' || !analysis.files) {
-    return [];
-  }
-  
-  return analysis.files.map(file => {
-    const riskScore = calculateFileRiskScore(file);
-    const heatLevel = calculateHeatLevel(riskScore);
-    
-    return {
-      path: file.fileName,
-      riskScore,
-      heatLevel,
-      lines: file.lines,
-      language: file.language,
-      size: file.size || 0
-    };
-  }).sort((a, b) => b.riskScore - a.riskScore); // 🔴 高リスク → 🟡 → 🟢 の順
-};
-
-// --- 技術的負債集中度計算（未踏で光る機能）---
-const calculateTechDebtConcentration = (files: TechDebtFile[]): { concentration: string; percentage: number } => {
-  if (files.length === 0) return { concentration: 'LOW', percentage: 0 };
-  
-  // 上位20%のファイルが全体のリスクの何%を占めるか
-  const top20Count = Math.max(1, Math.ceil(files.length * 0.2));
-  const top20Files = files.slice(0, top20Count);
-  const totalRisk = files.reduce((sum, file) => sum + file.riskScore, 0);
-  const top20Risk = top20Files.reduce((sum, file) => sum + file.riskScore, 0);
-  const concentration = totalRisk > 0 ? (top20Risk / totalRisk) * 100 : 0;
-  
-  let level: string;
-  if (concentration >= 65) level = 'HIGH';
-  else if (concentration >= 45) level = 'MEDIUM';
-  else level = 'LOW';
-  
-  return { concentration: level, percentage: Math.round(concentration) };
-};
-
-// --- 技術的負債ヒートマップコンポーネント ---
-const TechDebtHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
-  const techDebtFiles = generateTechDebtData(analysis);
-  
-  if (techDebtFiles.length === 0) {
-    return null;
-  }
-  
-  // 色設計（RiskGaugeと統一）
-  const heatColors = {
-    low: { bg: '#dcfce7', border: '#22c55e', icon: '🟢', text: '#166534' },
-    medium: { bg: '#fef3c7', border: '#eab308', icon: '🟡', text: '#713f12' },
-    high: { bg: '#fee2e2', border: '#ef4444', icon: '🔴', text: '#991b1b' }
-  };
-  
-  // 集約サマリー
-  const summary = {
-    high: techDebtFiles.filter(f => f.heatLevel === 'high').length,
-    medium: techDebtFiles.filter(f => f.heatLevel === 'medium').length,
-    low: techDebtFiles.filter(f => f.heatLevel === 'low').length
-  };
-  
-  // 技術的負債集中度
-  const concentration = calculateTechDebtConcentration(techDebtFiles);
-  
-  // ファイル選択ハンドラ
-  const handleFileClick = (file: TechDebtFile) => {
-    // 既存のファイル詳細ビューに遷移するロジック
-    const fileElement = document.querySelector(`[data-file-path="${file.path}"]`);
-    if (fileElement) {
-      fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // ハイライト効果（簡易版）
-      (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
-      setTimeout(() => {
-        (fileElement as HTMLElement).style.backgroundColor = '';
-      }, 2000);
-    }
-  };
-  
-  return (
-    <div style={{
-      backgroundColor: '#fafafa',
-      border: '1px solid #d9d9d9',
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
-        🔥 技術的負債ヒートマップ
-      </h3>
-      
-      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
-        💡 プロジェクト全体の技術的負債分布を可視化。赤いファイルから優先的に改善しましょう。
-      </div>
-      
-      {/* ⚠️ Risk Concentration バナー */}
-      <div style={{
-        backgroundColor: concentration.concentration === 'HIGH' ? '#fee2e2' : 
-                        concentration.concentration === 'MEDIUM' ? '#fef3c7' : '#dcfce7',
-        border: `1px solid ${concentration.concentration === 'HIGH' ? '#ef4444' : 
-                              concentration.concentration === 'MEDIUM' ? '#eab308' : '#22c55e'}`,
-        borderRadius: '8px',
-        padding: '12px 16px',
-        marginBottom: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
-      }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#666' }}>
-          ⚠️ Risk Concentration: {concentration.concentration}
-        </span>
-        <span style={{ fontSize: '13px', color: '#666' }}>
-          Top 20% files = {concentration.percentage}% of total risk
-        </span>
-      </div>
-      
-      {/* 集約サマリー */}
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
-          📊 技術的負債サマリー
-        </h4>
-        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.high.border }} />
-            <span style={{ fontSize: '13px', color: '#666' }}>High Risk: <strong>{summary.high}</strong></span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.medium.border }} />
-            <span style={{ fontSize: '13px', color: '#666' }}>Medium: <strong>{summary.medium}</strong></span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: heatColors.low.border }} />
-            <span style={{ fontSize: '13px', color: '#666' }}>Low: <strong>{summary.low}</strong></span>
-          </div>
-        </div>
-        
-        {/* 技術的負債集中度（未踏で光る機能） */}
-        <div style={{
-          backgroundColor: concentration.concentration === 'HIGH' ? '#fee2e2' : 
-                          concentration.concentration === 'MEDIUM' ? '#fef3c7' : '#dcfce7',
-          border: `1px solid ${concentration.concentration === 'HIGH' ? '#ef4444' : 
-                              concentration.concentration === 'MEDIUM' ? '#eab308' : '#22c55e'}`,
-          borderRadius: '6px',
-          padding: '8px 12px',
-          display: 'inline-block'
-        }}>
-          <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#666' }}>
-            ⭐ 技術的負債集中度: {concentration.concentration} (上位20%が{concentration.percentage}%のリスクを占める)
-          </span>
-        </div>
-      </div>
-      
-      {/* ヒートマップグリッド */}
-      <div>
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          📁 ファイル別リスク分布
-        </h4>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '8px',
-          maxHeight: '500px',
-          overflowY: 'auto'
-        }}>
-          {techDebtFiles.map((file) => {
-            const heatColor = heatColors[file.heatLevel];
-            
-            return (
-              <div
-                key={file.path}
-                data-file-path={file.path}
-                style={{
-                  backgroundColor: heatColor.bg,
-                  border: `2px solid ${heatColor.border}`,
-                  borderRadius: '8px',
-                  padding: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  position: 'relative',
-                  minHeight: '80px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                  e.currentTarget.style.zIndex = '10';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.zIndex = '1';
-                }}
-                onClick={() => handleFileClick(file)}
-                title={`${file.path}\nRisk: ${file.riskScore}\nLines: ${file.lines}\nLanguage: ${file.language}`}
-              >
-                {/* ファイル名とアイコン */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '16px' }}>{heatColor.icon}</span>
-                  <div style={{
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    color: heatColor.text,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1
-                  }}>
-                    {file.path.split('/').pop()}
-                  </div>
-                </div>
-                
-                {/* リスクスコア */}
-                <div style={{
-                  fontSize: '11px',
-                  color: '#666',
-                  marginBottom: '4px'
-                }}>
-                  Risk: <strong style={{ color: heatColor.text }}>{file.riskScore}</strong>
-                </div>
-                
-                {/* 詳細情報 */}
-                <div style={{ fontSize: '10px', color: '#888', lineHeight: '1.2' }}>
-                  <div>{file.lines} lines</div>
-                  <div>{file.language}</div>
-                </div>
-                
-                {/* ホバー時の詳細ツールチップ */}
-                <div style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  backgroundColor: 'white',
-                  border: '1px solid #d9d9d9',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: '100',
-                  opacity: '0',
-                  pointerEvents: 'none',
-                  transition: 'opacity 0.2s',
-                  width: '200px',
-                  marginBottom: '4px'
-                }}
-                className="heatmap-tooltip"
-              >
-                <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '4px', color: '#262626' }}>
-                  {file.path}
-                </div>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
-                  Risk: {file.riskScore} ({file.heatLevel.toUpperCase()})
-                </div>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '2px' }}>
-                  Lines: {file.lines}
-                </div>
-                <div style={{ fontSize: '10px', color: '#666' }}>
-                  Language: {file.language}
-                </div>
-              </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      
-      {/* 凡例 */}
-      <div style={{ marginTop: '16px', display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {Object.entries(heatColors).map(([level, color]) => (
-          <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{
-              width: '16px',
-              height: '16px',
-              borderRadius: '3px',
-              backgroundColor: color.border
-            }} />
-            <span style={{ fontSize: '12px', color: '#666' }}>
-              {level.toUpperCase()} ({level === 'high' ? '70-100' : level === 'medium' ? '40-69' : '0-39'})
-            </span>
-          </div>
-        ))}
-      </div>
-      
-      {/* ツールチップ用スタイル */}
-      <style>{`
-        .heatmap-tooltip {
-          opacity: 0;
-          pointer-events: none;
-        }
-        div:hover .heatmap-tooltip {
-          opacity: 1;
-        }
-      `}</style>
-    </div>
-  );
-};
-
 // --- リファクタ優先度型定義 ---
 interface RefactorPriority {
   path: string;
@@ -3576,218 +3258,43 @@ const generateProjectActionPlan = (analysis: AnalysisResult): ProjectActionPlan 
 
 // --- レポート出力機能 ---
 const generateActionReport = (plan: ProjectActionPlan): string => {
-  let report = '# Recommended Refactors\n\n';
+  let report = '# 推奨リファクタリング\n\n';
   
-  // Critical actions
+  // クリティカルアクション
   if (plan.critical.length > 0) {
-    report += '## 🔥 Critical Actions\n\n';
+    report += '## 🔥 クリティカルアクション\n\n';
     plan.critical.forEach((action, index) => {
       report += `${index + 1}. **${action.title}** (${action.filePath})\n`;
       report += `   - ${action.description}\n`;
-      if (action.why) report += `   - *Why: ${action.why}*\n`;
+      if (action.why) report += `   - *理由: ${action.why}*\n`;
       report += '\n';
     });
   }
   
-  // High priority actions
+  // 高優先度アクション
   if (plan.high.length > 0) {
-    report += '## ⚠️ High Priority Actions\n\n';
+    report += '## ⚠️ 高優先度アクション\n\n';
     plan.high.slice(0, 5).forEach((action, index) => {
       report += `${index + 1}. **${action.title}** (${action.filePath})\n`;
       report += `   - ${action.description}\n`;
-      if (action.why) report += `   - *Why: ${action.why}*\n`;
+      if (action.why) report += `   - *理由: ${action.why}*\n`;
       report += '\n';
     });
     
     if (plan.high.length > 5) {
-      report += `... and ${plan.high.length - 5} more high priority actions\n\n`;
+      report += `... 他${plan.high.length - 5}件の高優先度アクション\n\n`;
     }
   }
   
-  // Summary
-  report += '## Summary\n\n';
-  report += `- Critical: ${plan.summary.critical}\n`;
-  report += `- High: ${plan.summary.high}\n`;
-  report += `- Medium: ${plan.summary.medium}\n`;
-  report += `- Low: ${plan.summary.low}\n`;
-  report += `\n**Total: ${plan.summary.critical + plan.summary.high + plan.summary.medium + plan.summary.low} actions**\n`;
+  // サマリー
+  report += '## サマリー\n\n';
+  report += `- クリティカル: ${plan.summary.critical}\n`;
+  report += `- 高優先度: ${plan.summary.high}\n`;
+  report += `- 中優先度: ${plan.summary.medium}\n`;
+  report += `- 低優先度: ${plan.summary.low}\n`;
+  report += `\n**合計: ${plan.summary.critical + plan.summary.high + plan.summary.medium + plan.summary.low}件のアクション**\n`;
   
   return report;
-};
-
-// --- 改善アクション表示コンポーネント ---
-const ImprovementActionEngine: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
-  const actionPlan = generateProjectActionPlan(analysis);
-  
-  const totalActions = actionPlan.summary.critical + actionPlan.summary.high + actionPlan.summary.medium + actionPlan.summary.low;
-  
-  if (totalActions === 0) {
-    return null;
-  }
-  
-  // 優先度の色とアイコン
-  const priorityConfig = {
-    critical: { color: '#ef4444', bgColor: '#fee2e2', icon: '🔥', label: 'Critical' },
-    high: { color: '#f97316', bgColor: '#fed7aa', icon: '⚠️', label: 'High' },
-    medium: { color: '#eab308', bgColor: '#fef3c7', icon: '💡', label: 'Medium' },
-    low: { color: '#22c55e', bgColor: '#dcfce7', icon: '✅', label: 'Low' }
-  };
-  
-  return (
-    <div style={{
-      backgroundColor: '#fafafa',
-      border: '1px solid #d9d9d9',
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
-        🛠️ 改善アクション自動生成
-      </h3>
-      
-      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
-        💡 解析結果から具体的な改善アクションを自動生成。優先度の高いものから着手しましょう。
-      </div>
-      
-      {/* 全体アクションサマリー */}
-      <div style={{
-        backgroundColor: 'white',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '16px',
-        marginBottom: '20px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h4 style={{ margin: 0, color: '#1f2937', fontSize: '14px', fontWeight: '600' }}>
-            Recommended Improvements
-          </h4>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          {Object.entries(priorityConfig).map(([priority, config]) => {
-            const count = actionPlan.summary[priority as keyof typeof actionPlan.summary];
-            if (count === 0) return null;
-            
-            return (
-              <div
-                key={priority}
-                style={{
-                  backgroundColor: config.bgColor,
-                  border: `1px solid ${config.color}`,
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span style={{ fontSize: '16px' }}>{config.icon}</span>
-                <span style={{ fontSize: '12px', fontWeight: 'bold', color: config.color }}>
-                  {config.label} ({count})
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      
-      {/* Critical Actions */}
-      {actionPlan.critical.length > 0 && (
-        <div style={{
-          backgroundColor: 'white',
-          border: '1px solid #e0e0e0',
-          borderRadius: '8px',
-          padding: '16px',
-          marginBottom: '16px'
-        }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#ef4444' }}>
-            🔥 Critical Actions
-          </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {actionPlan.critical.slice(0, 3).map((action, index) => (
-              <div
-                key={action.id}
-                style={{
-                  backgroundColor: '#fee2e2',
-                  border: '1px solid #ef4444',
-                  borderRadius: '6px',
-                  padding: '12px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#991b1b' }}>
-                    {index + 1}. {action.title}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#666', backgroundColor: '#fef2f2', padding: '2px 6px', borderRadius: '4px' }}>
-                    {action.filePath}
-                  </div>
-                </div>
-                <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>
-                  {action.description}
-                </div>
-                {action.why && (
-                  <div style={{ fontSize: '11px', color: '#7f1d1d', fontStyle: 'italic' }}>
-                    Why: {action.why}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          
-          {actionPlan.critical.length > 3 && (
-            <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: '8px' }}>
-              ... and {actionPlan.critical.length - 3} more critical actions
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* High Priority Actions */}
-      {actionPlan.high.length > 0 && (
-        <div style={{
-          backgroundColor: 'white',
-          border: '1px solid #e0e0e0',
-          borderRadius: '8px',
-          padding: '16px'
-        }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#f97316' }}>
-            ⚠️ High Priority Actions
-          </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {actionPlan.high.slice(0, 5).map((action, index) => (
-              <div
-                key={action.id}
-                style={{
-                  backgroundColor: '#fed7aa',
-                  border: '1px solid #f97316',
-                  borderRadius: '6px',
-                  padding: '10px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#9a3412' }}>
-                    {index + 1}. {action.title}
-                  </div>
-                  <div style={{ fontSize: '10px', color: '#666', backgroundColor: '#fff7ed', padding: '1px 4px', borderRadius: '3px' }}>
-                    {action.filePath}
-                  </div>
-                </div>
-                <div style={{ fontSize: '11px', color: '#666' }}>
-                  {action.description}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {actionPlan.high.length > 5 && (
-            <div style={{ fontSize: '12px', color: '#666', textAlign: 'center', marginTop: '8px' }}>
-              ... and {actionPlan.high.length - 5} more high priority actions
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 };
 
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
@@ -4219,8 +3726,8 @@ const ComparisonView: React.FC<{ history: AnalysisHistory[] }> = ({ history }) =
 
 const RiskBadge: React.FC<{ risk?: BlackboxRisk }> = ({ risk }) => {
   if (!risk) return null;
-  const color = risk.level === 'HIGH' ? '#ff4d4f' : risk.level === 'MEDIUM' ? '#faad14' : '#52c41a';
-  const label = risk.level === 'HIGH' ? '🔴 HIGH Risk' : risk.level === 'MEDIUM' ? '🟡 MEDIUM Risk' : '🟢 LOW Risk';
+  const color = risk.level === '高' ? '#ff4d4f' : risk.level === '中' ? '#faad14' : '#52c41a';
+  const label = risk.level === '高' ? '🔴 高リスク' : risk.level === '中' ? '🟡 中リスク' : '🟢 低リスク';
   return (
     <span className="risk-mini-badge" style={{ backgroundColor: color, color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px', fontWeight: 'bold' }}>
       {label}
@@ -4304,7 +3811,7 @@ const StructureStats: React.FC<{ structure: CodeStructure }> = ({ structure }) =
 const HighRiskSummary: React.FC<{ files: FileAnalysis[]; onSelect: (f: FileAnalysis) => void }> = ({ files, onSelect }) => {
   const [copied, setCopied] = React.useState(false);
   const highRiskFiles = files
-    .filter(f => f.blackboxRisk?.level === 'HIGH')
+    .filter(f => f.blackboxRisk?.level === '高')
     .sort((a, b) => (b.blackboxRisk?.score || 0) - (a.blackboxRisk?.score || 0));
 
   if (highRiskFiles.length === 0) return null;
@@ -4919,7 +4426,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
 
     return {
       score: risk.blackboxScore,
-      level: risk.riskLevel,
+      level: risk.riskLevel === 'LOW' ? '低' : risk.riskLevel === 'MEDIUM' ? '中' : '高',
       breakdown: { fileSize: risk.breakdown.fileSize, functionLength: 0, nestingDepth: risk.breakdown.nesting, commentRate: risk.breakdown.comments, unusedCode: risk.breakdown.unusedFunctions, typeSafety: 0 },
       nestingDepth: nesting,
       commentRatio: comment,
@@ -5012,7 +4519,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
               dependencies: [], resolvedDependencies: [],
               blackboxRisk: { 
                 score: 0, 
-                level: 'LOW' as const, 
+                level: '低' as const, 
                 breakdown: { fileSize: 0, functionLength: 0, nestingDepth: 0, commentRate: 0, unusedCode: 0, typeSafety: 0 }, 
                 nestingDepth: { maxDepth: 0, avgDepth: 0, riskScore: 0 }, 
                 commentRatio: { commentRatio: 0, riskScore: 0, commentLines: 0, totalLines: 0 }, 
@@ -5175,7 +4682,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                         position: 'relative'
                       }}
                       onClick={() => {
-                        alert(`ブラックボックス指数 詳細情報:\n\nスコア: ${bbi.score}\nレベル: ${level}\n\n解釈:\n${bbi.interpretation.join('\n')}\n\n推奨アクション:\n${level === 'CRITICAL' ? '即時対応が必要です' : level === 'WARNING' ? '監視と改善が必要です' : '現状維持で問題ありません'}`);
+                        alert(`ブラックボックス指数 詳細情報:\n\nスコア: ${bbi.score}\nレベル: ${level === 'CRITICAL' ? 'クリティカル' : level === 'WARNING' ? '警告' : '健全'}\n\n解釈:\n${bbi.interpretation.join('\n')}\n\n推奨アクション:\n${level === 'CRITICAL' ? '即時対応が必要です' : level === 'WARNING' ? '監視と改善が必要です' : '現状維持で問題ありません'}`);
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -5228,7 +4735,7 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       }}
                       onClick={() => {
                         const weakPoint = health.breakdown.avgCommentRatio < 50 ? 'ドキュメント' : health.breakdown.avgRiskScore > 70 ? 'リスクスコア' : 'コード品質';
-                        alert(`健全性スコア 詳細情報:\n\nスコア: ${health.score}\nレベル: ${level}\n\n内訳:\n• コメント率: ${health.breakdown.avgCommentRatio.toFixed(1)}%\n• 平均リスクスコア: ${health.breakdown.avgRiskScore.toFixed(1)}\n• 高リスクファイル率: ${(health.breakdown.highRiskFileRatio * 100).toFixed(1)}%\n• 平均ネスト深度: ${health.breakdown.avgNestingDepth.toFixed(1)}\n• AI生成率: ${(health.breakdown.avgAiLikelihood * 100).toFixed(1)}%\n\n弱点: ${weakPoint}\n\n推奨アクション:\n${level === 'POOR' ? '全体的な改善が必要です' : level === 'FAIR' ? '部分的な改善を推奨します' : level === 'GOOD' ? '維持と微改善を推奨します' : '現状を維持してください'}`);
+                        alert(`健全性スコア 詳細情報:\n\nスコア: ${health.score}\nレベル: ${level === 'POOR' ? '要改善' : level === 'FAIR' ? '普通' : level === 'GOOD' ? '良好' : '優秀'}\n\n内訳:\n• コメント率: ${health.breakdown.avgCommentRatio.toFixed(1)}%\n• 平均リスクスコア: ${health.breakdown.avgRiskScore.toFixed(1)}\n• 高リスクファイル率: ${(health.breakdown.highRiskFileRatio * 100).toFixed(1)}%\n• 平均ネスト深度: ${health.breakdown.avgNestingDepth.toFixed(1)}\n• AI生成率: ${(health.breakdown.avgAiLikelihood * 100).toFixed(1)}%\n\n弱点: ${weakPoint}\n\n推奨アクション:\n${level === 'POOR' ? '全体的な改善が必要です' : level === 'FAIR' ? '部分的な改善を推奨します' : level === 'GOOD' ? '維持と微改善を推奨します' : '現状を維持してください'}`);
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -5262,133 +4769,12 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                       </div>
                     );
                   })()}
-                  
-                  {/* High Risk Filesカード */}
-                  {(() => {
-                    if (analysisResult.type !== 'zip' || !analysisResult.files) return null;
-                    const highRiskCount = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70).length;
-                    const topRiskFile = analysisResult.files
-                      .filter(f => calculateFileRiskScore(f) >= 70)
-                      .sort((a, b) => calculateFileRiskScore(b) - calculateFileRiskScore(a))[0];
-                    return (
-                      <div style={{
-                        backgroundColor: 'white',
-                        border: '1px solid #ef4444',
-                        borderRadius: '6px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        position: 'relative'
-                      }}
-                      onClick={() => {
-                        if (!analysisResult.files) return;
-                        const highRiskFiles = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70);
-                        const top3Files = highRiskFiles.slice(0, 3);
-                        const fileList = top3Files.map((file, index) => {
-                          const score = calculateFileRiskScore(file);
-                          return `${index + 1}. ${file.fileName.split('/').pop()} (スコア: ${score.toFixed(1)})`;
-                        }).join('\n');
-                        
-                        alert(`高リスクファイル 詳細情報:\n\nハイリスクファイル数: ${highRiskCount}件\n\nトップ3ハイリスクファイル:\n${fileList}${highRiskFiles.length > 3 ? `\n... 他${highRiskFiles.length - 3}件` : ''}\n\n推奨アクション:\n• 優先的にハイリスクファイルを確認してください\n• AI生成コードの場合は特に注意が必要です\n• 手動レビューとテストの追加を推奨します`);
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>高リスクファイル</div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444', marginBottom: '4px' }}>
-                          {highRiskCount}
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', marginBottom: '4px' }}>
-                          🔴 要対応
-                        </div>
-                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          上位: {topRiskFile?.fileName.split('/').pop() || '不明'}
-                        </div>
-                        <div style={{ 
-                          position: 'absolute', 
-                          top: '4px', 
-                          right: '4px', 
-                          fontSize: '10px', 
-                          color: '#999',
-                          opacity: 0.7
-                        }}>
-                          🔍
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  
-                  {/* Critical Actionsカード */}
-                  {(() => {
-                    const actionPlan = generateProjectActionPlan(analysisResult);
-                    const totalHours = actionPlan.critical.length * 2 + actionPlan.high.length * 1.5;
-                    return (
-                      <div style={{
-                        backgroundColor: 'white',
-                        border: '1px solid #f97316',
-                        borderRadius: '6px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        position: 'relative'
-                      }}
-                      onClick={() => {
-                        const criticalActions = actionPlan.critical.slice(0, 3);
-                        const highActions = actionPlan.high.slice(0, 2);
-                        const actionList = criticalActions.map((action, index) => {
-                          return `C${index + 1}. ${action.title} (${action.filePath})`;
-                        }).concat(highActions.map((action, index) => {
-                          return `H${index + 1}. ${action.title} (${action.filePath})`;
-                        })).join('\n');
-                        
-                        alert(`重要アクション 詳細情報:\n\nクリティカルアクション数: ${actionPlan.summary.critical}件\nハイプライオリティ数: ${actionPlan.summary.high}件\n\n優先アクション:\n${actionList}\n\n推定工数: 約${Math.round(totalHours)}時間\n\n推奨アクション:\n• クリティカルアクションから優先的に対応してください\n• AI生成コードの修正は特に注意が必要です\n• テストとレビューを必ず実施してください`);
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px', fontWeight: '500' }}>重要アクション</div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f97316', marginBottom: '4px' }}>
-                          {actionPlan.summary.critical}
-                        </div>
-                        <div style={{ fontSize: '10px', color: '#f97316', fontWeight: 'bold', marginBottom: '4px' }}>
-                          🚨 至急対応
-                        </div>
-                        <div style={{ fontSize: '9px', color: '#666', lineHeight: '1.2' }}>
-                          推定: 約{Math.round(totalHours)}時間
-                        </div>
-                        <div style={{ 
-                          position: 'absolute', 
-                          top: '4px', 
-                          right: '4px', 
-                          fontSize: '10px', 
-                          color: '#999',
-                          opacity: 0.7
-                        }}>
-                          🔍
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               )}
             </div>
 
-            {/* Level 2: どこが問題か（中段） */}
-            <div style={{ marginBottom: '12px' }}>
+            {/* Level 2: 理解支援（下段・折りたたみ） */}
+            <div>
               <div 
                 style={{
                   display: 'flex',
@@ -5403,48 +4789,11 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                 onClick={() => toggleSection('level2')}
               >
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
-                  🔥 問題特定と改善優先度
-                </h3>
-                <span style={{ fontSize: '14px', color: '#666' }}>
-                  {expandedSections.level2 ? '▼' : '▶'}
-                </span>
-              </div>
-              
-              {expandedSections.level2 && (
-                <div>
-                  {/* 技術的負債ヒートマップ */}
-                  <TechDebtHeatmap analysis={analysisResult} />
-                  
-                  {/* リファクタ優先度エンジン */}
-                  <RefactorPriorityEngine analysis={analysisResult} />
-                  
-                  {/* 改善アクション自動生成エンジン */}
-                  <ImprovementActionEngine analysis={analysisResult} />
-                </div>
-              )}
-            </div>
-
-            {/* Level 3: 理解支援（下段・折りたたみ） */}
-            <div>
-              <div 
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '12px',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  backgroundColor: expandedSections.level3 ? '#f3f4f6' : 'transparent'
-                }}
-                onClick={() => toggleSection('level3')}
-              >
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
                   📖 詳細分析と理解支援
                   {(() => {
                     if (analysisResult.type !== 'zip' || !analysisResult.files) return '';
                     const criticalCount = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70).length;
-                    if (criticalCount > 0 && !expandedSections.level3) {
+                    if (criticalCount > 0 && !expandedSections.level2) {
                       return (
                         <span style={{ 
                           marginLeft: '8px', 
@@ -5463,11 +4812,11 @@ const NextBestActionWidget: React.FC<{ analysis: AnalysisResult }> = ({ analysis
                   })()}
                 </h3>
                 <span style={{ fontSize: '14px', color: '#666' }}>
-                  {expandedSections.level3 ? '▼' : '▶'}
+                  {expandedSections.level2 ? '▼' : '▶'}
                 </span>
               </div>
               
-              {expandedSections.level3 && (
+              {expandedSections.level2 && (
                 <div>
                   {/* プロジェクト要約ビュー */}
                   <ProjectSummaryView 

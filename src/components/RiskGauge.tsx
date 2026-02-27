@@ -2,7 +2,7 @@ import React from "react"
 
 type Props = {
   score: number // 0-100
-  level: "LOW" | "MEDIUM" | "HIGH"
+  level: "低" | "中" | "高"
 }
 
 export const RiskGauge: React.FC<Props> = ({ score, level }) => {
@@ -14,9 +14,9 @@ export const RiskGauge: React.FC<Props> = ({ score, level }) => {
     circumference - (score / 100) * circumference
 
   const color =
-    level === "HIGH"
+    level === "高"
       ? "#ef4444"
-      : level === "MEDIUM"
+      : level === "中"
       ? "#f59e0b"
       : "#22c55e"
 
