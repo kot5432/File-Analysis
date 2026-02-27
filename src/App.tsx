@@ -4749,7 +4749,50 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AnalysisHistory[]>([]);
+  const [expandedSections, setExpandedSections] = useState({
+    level1: true,
+    level2: true,
+    level3: false
+  });
   const [fileContent, setFileContent] = useState<string>('');
+
+  // --- UI状態管理 ---
+  const toggleSection = (level: 'level1' | 'level2' | 'level3') => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [level]: !prev[level]
+    }));
+  };
+
+  // --- 次の最適アクション計算 ---
+  const getNextBestAction = (analysis: AnalysisResult): { action: string; impact: string; file: string } => {
+    const actionPlan = generateProjectActionPlan(analysis);
+    const priorities = generateRefactorRanking(analysis);
+    
+    if (actionPlan.critical.length > 0) {
+      const topCritical = actionPlan.critical[0];
+      return {
+        action: topCritical.title,
+        impact: 'Critical',
+        file: topCritical.filePath || 'Unknown'
+      };
+    }
+    
+    if (priorities.length > 0) {
+      const topPriority = priorities[0];
+      return {
+        action: 'Reduce complexity',
+        impact: 'High',
+        file: topPriority.path
+      };
+    }
+    
+    return {
+      action: 'Review documentation',
+      impact: 'Medium',
+      file: 'README.md'
+    };
+  };
 
   const SUPPORTED_EXTENSIONS = [
     '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json', '.xml', '.php', '.py', '.java',
@@ -4924,44 +4967,264 @@ function App() {
 
         {analysisResult && (
           <div className="analysis-result">
-            {/* プロジェクト健全性スコア */}
-            <ProjectHealthScoreView analysis={analysisResult} />
+            {/* 次の最適アクション（固定表示） */}
+            {(() => {
+              const nextAction = getNextBestAction(analysisResult);
+              return (
+                <div style={{
+                  backgroundColor: '#e0f2fe',
+                  border: '1px solid #0ea5e9',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#0c4a6e' }}>
+                    👉 Next Best Action:
+                  </span>
+                  <span style={{ fontSize: '13px', color: '#075985' }}>
+                    <strong>{nextAction.action}</strong> ({nextAction.file})
+                  </span>
+                  <span style={{
+                    backgroundColor: nextAction.impact === 'Critical' ? '#fee2e2' : 
+                                   nextAction.impact === 'High' ? '#fef3c7' : '#dcfce7',
+                    color: nextAction.impact === 'Critical' ? '#991b1b' : 
+                          nextAction.impact === 'High' ? '#713f12' : '#166534',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold'
+                  }}>
+                    {nextAction.impact}
+                  </span>
+                </div>
+              );
+            })()}
 
-            {/* ブラックボックス指数（BBI） */}
-            <BlackBoxIndexView analysis={analysisResult} history={history} />
+            {/* Level 1: 一目サマリー（最上部） */}
+            <div style={{ marginBottom: '20px' }}>
+              <div 
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  backgroundColor: expandedSections.level1 ? '#f3f4f6' : 'transparent'
+                }}
+                onClick={() => toggleSection('level1')}
+              >
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+                  📊 プロジェクト概要（3秒で理解）
+                </h3>
+                <span style={{ fontSize: '14px', color: '#666' }}>
+                  {expandedSections.level1 ? '▼' : '▶'}
+                </span>
+              </div>
+              
+              {expandedSections.level1 && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '12px',
+                  padding: '16px',
+                  backgroundColor: '#fafafa',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px'
+                }}>
+                  {/* BBI */}
+                  {(() => {
+                    const bbi = calculateBlackBoxIndex(analysisResult);
+                    if (!bbi) return null;
+                    const { level, color, icon, status } = getBBILevel(bbi.score);
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: `1px solid ${color}`,
+                        borderRadius: '6px',
+                        padding: '12px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Black Box Index</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color, marginBottom: '4px' }}>
+                          {bbi.score}
+                        </div>
+                        <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
+                          {icon} {status}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* プロジェクト健全性 */}
+                  {(() => {
+                    const health = calculateProjectHealthScore(analysisResult);
+                    if (!health) return null;
+                    const { level, color, icon } = getHealthLevel(health.score);
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: `1px solid ${color}`,
+                        borderRadius: '6px',
+                        padding: '12px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Health Score</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color, marginBottom: '4px' }}>
+                          {health.score}
+                        </div>
+                        <div style={{ fontSize: '11px', color, fontWeight: 'bold' }}>
+                          {icon} {level}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* High Riskファイル数 */}
+                  {(() => {
+                    if (analysisResult.type !== 'zip' || !analysisResult.files) return null;
+                    const highRiskCount = analysisResult.files.filter(f => calculateFileRiskScore(f) >= 70).length;
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: '1px solid #ef4444',
+                        borderRadius: '6px',
+                        padding: '12px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>High Risk Files</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ef4444', marginBottom: '4px' }}>
+                          {highRiskCount}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold' }}>
+                          🔴 Critical
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Critical Actions */}
+                  {(() => {
+                    const actionPlan = generateProjectActionPlan(analysisResult);
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: '1px solid #f97316',
+                        borderRadius: '6px',
+                        padding: '12px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Critical Actions</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f97316', marginBottom: '4px' }}>
+                          {actionPlan.summary.critical}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#f97316', fontWeight: 'bold' }}>
+                          ⚠️ Urgent
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
 
-            {/* プロジェクト要約ビュー */}
-            <ProjectSummaryView 
-              result={analysisResult} 
-              fileName={analysisResult.fileName || selectedFile?.name || 'Unknown'} 
-              content={fileContent}
-            />
+            {/* Level 2: どこが問題か（中段） */}
+            <div style={{ marginBottom: '20px' }}>
+              <div 
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  backgroundColor: expandedSections.level2 ? '#f3f4f6' : 'transparent'
+                }}
+                onClick={() => toggleSection('level2')}
+              >
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+                  🔥 問題特定と改善優先度
+                </h3>
+                <span style={{ fontSize: '14px', color: '#666' }}>
+                  {expandedSections.level2 ? '▼' : '▶'}
+                </span>
+              </div>
+              
+              {expandedSections.level2 && (
+                <div>
+                  {/* 技術的負債ヒートマップ */}
+                  <TechDebtHeatmap analysis={analysisResult} />
+                  
+                  {/* リファクタ優先度エンジン */}
+                  <RefactorPriorityEngine analysis={analysisResult} />
+                  
+                  {/* 改善アクション自動生成エンジン */}
+                  <ImprovementActionEngine analysis={analysisResult} />
+                </div>
+              )}
+            </div>
 
-            {/* 比較体験 */}
-            {history.length >= 2 && (
-              <ComparisonView history={history} />
-            )}
+            {/* Level 3: 理解支援（下段・折りたたみ） */}
+            <div>
+              <div 
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  backgroundColor: expandedSections.level3 ? '#f3f4f6' : 'transparent'
+                }}
+                onClick={() => toggleSection('level3')}
+              >
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+                  📖 詳細分析と理解支援
+                </h3>
+                <span style={{ fontSize: '14px', color: '#666' }}>
+                  {expandedSections.level3 ? '▼' : '▶'}
+                </span>
+              </div>
+              
+              {expandedSections.level3 && (
+                <div>
+                  {/* プロジェクト要約ビュー */}
+                  <ProjectSummaryView 
+                    result={analysisResult} 
+                    fileName={analysisResult.fileName || selectedFile?.name || 'Unknown'} 
+                    content={fileContent}
+                  />
 
-            {/* 読む順番ガイド */}
-            <ReadingOrderGuide 
-              files={analysisResult.files} 
-              singleFile={analysisResult.type === 'single' ? analysisResult : undefined} 
-            />
+                  {/* 比較体験 */}
+                  {history.length >= 2 && (
+                    <ComparisonView history={history} />
+                  )}
 
-            {/* 改善提案 */}
-            <ImprovementSuggestions analysis={analysisResult} />
+                  {/* 読む順番ガイド */}
+                  <ReadingOrderGuide 
+                    files={analysisResult.files} 
+                    singleFile={analysisResult.type === 'single' ? analysisResult : undefined} 
+                  />
 
-            {/* リスクヒートマップ */}
-            <RiskHeatmapWithFixes analysis={analysisResult} />
+                  {/* 改善提案 */}
+                  <ImprovementSuggestions analysis={analysisResult} />
 
-            {/* 技術的負債ヒートマップ */}
-            <TechDebtHeatmap analysis={analysisResult} />
+                  {/* リスクヒートマップ */}
+                  <RiskHeatmapWithFixes analysis={analysisResult} />
 
-            {/* リファクタ優先度エンジン */}
-            <RefactorPriorityEngine analysis={analysisResult} />
-
-            {/* 改善アクション自動生成エンジン */}
-            <ImprovementActionEngine analysis={analysisResult} />
+                  {/* ファイル詳細 */}
+                  {selectedFileInZip && (
+                    <FileDetailView file={selectedFileInZip} onBack={() => setSelectedFileInZip(null)} />
+                  )}
+                </div>
+              )}
+            </div>
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
