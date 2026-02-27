@@ -955,6 +955,87 @@ function App() {
                   )}
                 </>
               )}
+
+              {/* ZIPファイル全体の技術スタック分析 */}
+              {analysisResult.type === 'zip' && analysisResult.files && (
+                <div className="zip-tech-analysis" style={{ 
+                  backgroundColor: '#f5f5f5', 
+                  padding: '16px', 
+                  borderRadius: '8px', 
+                  marginTop: '16px' 
+                }}>
+                  <h3>🔧 プロジェクト全体の技術スタック</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                    {(() => {
+                      const allTechnologies = new Set<string>();
+                      const allLanguages = new Set<string>();
+                      
+                      analysisResult.files.forEach(file => {
+                        if (file.technologies) {
+                          file.technologies.forEach(tech => allTechnologies.add(tech));
+                        }
+                        allLanguages.add(file.language);
+                      });
+                      
+                      const techArray = Array.from(allTechnologies);
+                      const langArray = Array.from(allLanguages);
+                      
+                      return (
+                        <>
+                          <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                            <h5 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>📋 言語</h5>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {langArray.map(lang => (
+                                <span 
+                                  key={lang}
+                                  style={{ 
+                                    backgroundColor: '#f0f0f0', 
+                                    padding: '4px 8px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '12px',
+                                    border: '1px solid #d0d0d0'
+                                  }}
+                                >
+                                  {lang}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                            <h5 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>🛠️ 技術</h5>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {techArray.map(tech => (
+                                <span 
+                                  key={tech}
+                                  style={{ 
+                                    backgroundColor: '#e6f7ff', 
+                                    padding: '4px 8px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '12px',
+                                    border: '1px solid #d0d0d0'
+                                  }}
+                                >
+                                  {tech}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                            <h5 style={{ margin: '0 0 8px 0', color: '#1890ff' }}>📊 プロジェクト概要</h5>
+                            <div style={{ fontSize: '14px' }}>
+                              <p><strong>ファイル数:</strong> {analysisResult.totalFiles}件</p>
+                              <p><strong>主要言語:</strong> {langArray.slice(0, 3).join(', ')}{langArray.length > 3 ? `... 他${langArray.length - 3}件` : ''}</p>
+                              <p><strong>主要技術:</strong> {techArray.slice(0, 5).join(', ')}{techArray.length > 5 ? `... 他${techArray.length - 5}件` : ''}</p>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
