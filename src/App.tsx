@@ -425,144 +425,330 @@ const TechStackAnalysis: React.FC<{ content: string; language: string }> = ({ co
 // --- プロジェクト要約ビューコンポーネント ---
 const ProjectSummaryView: React.FC<{ result: AnalysisResult; fileName: string }> = ({ result, fileName }) => {
   const getProjectType = () => {
-    if (result.type === 'zip') {
-      const languages = Object.keys(result.summary?.languages || {});
-      if (languages.includes('JavaScript') || languages.includes('TypeScript')) {
-        return 'Webアプリケーション';
-      } else if (languages.includes('Python')) {
-        return 'Pythonアプリケーション';
-      } else if (languages.includes('Java')) {
-        return 'Javaアプリケーション';
+    const technologies = result.type === 'zip' 
+      ? Object.keys(result.summary?.technologies || {})
+      : result.technologies || [];
+    
+    const languages = result.type === 'zip'
+      ? Object.keys(result.summary?.languages || {})
+      : [result.language].filter(Boolean);
+    
+    // React SPA
+    if (technologies.includes('React') && !technologies.includes('Express.js') && !technologies.includes('Node.js')) {
+      return 'React SPA';
+    }
+    
+    // Node.js API
+    if (technologies.includes('Node.js') || technologies.includes('Express.js')) {
+      if (technologies.includes('React') || technologies.includes('Vue.js')) {
+        return 'Fullstack Web App';
       }
-      return 'マルチ言語プロジェクト';
+      return 'Node.js API';
     }
-    return '単一ファイル';
-  };
-
-  const getSafetyLevel = () => {
-    const riskScore = result.blackboxRisk?.score || 0;
-    if (riskScore >= 70) return { level: '⚠️ 高リスク', color: '#ff4d4f', description: '要注意' };
-    if (riskScore >= 40) return { level: '🟡 中リスク', color: '#faad14', description: '注意' };
-    return { level: '✅ 低リスク', color: '#52c41a', description: '安全' };
-  };
-
-  const getAIGeneration = () => {
-    const aiLikelihood = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
-    if (aiLikelihood >= 70) return { level: '🤖 AI生成確率高', color: '#ff4d4f', description: 'AI生成の可能性が高い' };
-    if (aiLikelihood >= 40) return { level: '🤔 AI生成の可能性', color: '#faad14', description: 'AI生成の可能性あり' };
-    return { level: '👤 人間が書いた', color: '#52c41a', description: '人間が書いた可能性が高い' };
-  };
-
-  const getMainTech = () => {
+    
+    // Python系
+    if (languages.includes('Python')) {
+      if (technologies.includes('Django') || technologies.includes('Flask')) {
+        return 'Python Web App';
+      }
+      return 'Python Script';
+    }
+    
+    // Java系
+    if (languages.includes('Java')) {
+      if (technologies.includes('Spring Boot')) {
+        return 'Java Web App';
+      }
+      return 'Java Application';
+    }
+    
+    // TypeScript系
+    if (languages.includes('TypeScript')) {
+      if (technologies.includes('React') || technologies.includes('Vue.js')) {
+        return 'TypeScript Web App';
+      }
+      return 'TypeScript Project';
+    }
+    
+    // その他
     if (result.type === 'zip') {
-      const techs = Object.entries(result.summary?.technologies || {})
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 3)
-        .map(([tech]) => tech);
-      return techs.length > 0 ? techs.join(', ') : '不明';
+      return 'Multi-language Project';
     }
-    return result.technologies?.slice(0, 3).join(', ') || '不明';
+    
+    return 'Single File';
   };
 
-  const safety = getSafetyLevel();
-  const aiGen = getAIGeneration();
+  const getRiskLevel = () => {
+    const riskScore = result.blackboxRisk?.score || 0;
+    if (riskScore >= 70) return { level: 'HIGH', color: '#ff4d4f', bgColor: '#fff2f0', borderColor: '#ffccc7' };
+    if (riskScore >= 40) return { level: 'MEDIUM', color: '#faad14', bgColor: '#fffbe6', borderColor: '#ffe58f' };
+    return { level: 'LOW', color: '#52c41a', bgColor: '#f6ffed', borderColor: '#b7eb8f' };
+  };
+
+  const getAILevel = () => {
+    const aiLikelihood = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
+    if (aiLikelihood >= 70) return { level: 'HIGH', color: '#ff4d4f', bgColor: '#fff2f0', borderColor: '#ffccc7' };
+    if (aiLikelihood >= 40) return { level: 'MEDIUM', color: '#faad14', bgColor: '#fffbe6', borderColor: '#ffe58f' };
+    return { level: 'LOW', color: '#52c41a', bgColor: '#f6ffed', borderColor: '#b7eb8f' };
+  };
+
+  const getMainTechnologies = () => {
+    if (result.type === 'zip') {
+      return Object.entries(result.summary?.technologies || {})
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([tech]) => tech);
+    }
+    return result.technologies?.slice(0, 5) || [];
+  };
+
+  const getProjectScale = () => {
+    if (result.type === 'zip') {
+      const files = result.totalFiles || 0;
+      const lines = result.summary?.totalLines || 0;
+      const maxFile = Math.max(...(result.files?.map(f => f.lines) || [0]));
+      
+      return {
+        totalFiles: files,
+        totalLines: lines,
+        maxFile: maxFile
+      };
+    }
+    
+    return {
+      totalFiles: 1,
+      totalLines: result.lines || 0,
+      maxFile: result.lines || 0
+    };
+  };
+
   const projectType = getProjectType();
-  const mainTech = getMainTech();
+  const riskLevel = getRiskLevel();
+  const aiLevel = getAILevel();
+  const mainTechs = getMainTechnologies();
+  const scale = getProjectScale();
+  const riskScore = result.blackboxRisk?.score || 0;
+  const aiScore = result.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
 
   return (
-    <div className="project-summary" style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      padding: '24px',
+    <div className="project-snapshot" style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
       borderRadius: '12px',
+      padding: '24px',
       marginBottom: '24px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+      {/* ヘッダー */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '20px',
+        paddingBottom: '16px',
+        borderBottom: '1px solid #e8e8e8'
+      }}>
         <div>
-          <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 'bold' }}>
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: '20px', 
+            fontWeight: '600',
+            color: '#262626'
+          }}>
             📁 {fileName}
           </h2>
-          <p style={{ margin: 0, fontSize: '16px', opacity: 0.9 }}>
-            {projectType} • {result.type === 'zip' ? `${result.totalFiles}ファイル` : '単一ファイル'}
+          <p style={{ 
+            margin: '4px 0 0 0', 
+            fontSize: '16px',
+            color: '#595959',
+            fontWeight: '500'
+          }}>
+            {projectType}
           </p>
         </div>
+        
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>解析完了</div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>
-            {new Date().toLocaleTimeString('ja-JP')}
+          <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '2px' }}>
+            解析完了
+          </div>
+          <div style={{ fontSize: '11px', color: '#bfbfbf' }}>
+            {new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-        <div style={{ 
-          backgroundColor: 'rgba(255,255,255,0.1)', 
-          padding: '16px', 
-          borderRadius: '8px',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🛡️ 安全性</div>
-          <div style={{ fontSize: '18px', fontWeight: 'bold', color: safety.color }}>
-            {safety.level}
+      {/* メインコンテンツ */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '20px' }}>
+        
+        {/* 左側：総合評価 */}
+        <div>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            総合評価
+          </h3>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* ブラックボックスリスク */}
+            <div style={{
+              backgroundColor: riskLevel.bgColor,
+              border: `1px solid ${riskLevel.borderColor}`,
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontSize: '12px', color: '#595959', marginBottom: '4px' }}>
+                ブラックボックスリスク
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ 
+                  fontSize: '24px', 
+                  fontWeight: 'bold', 
+                  color: riskLevel.color 
+                }}>
+                  {riskScore}
+                </span>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: '600', 
+                  backgroundColor: riskLevel.color,
+                  color: 'white',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}>
+                  {riskLevel.level}
+                </span>
+              </div>
+            </div>
+
+            {/* AI生成確率 */}
+            <div style={{
+              backgroundColor: aiLevel.bgColor,
+              border: `1px solid ${aiLevel.borderColor}`,
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontSize: '12px', color: '#595959', marginBottom: '4px' }}>
+                🤖 AI生成確率
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ 
+                  fontSize: '24px', 
+                  fontWeight: 'bold', 
+                  color: aiLevel.color 
+                }}>
+                  {aiScore}%
+                </span>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: '600', 
+                  backgroundColor: aiLevel.color,
+                  color: 'white',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}>
+                  {aiLevel.level}
+                </span>
+              </div>
+              <div style={{ fontSize: '10px', color: '#8c8c8c', marginTop: '4px' }}>
+                ※ This is heuristic estimation, not definitive AI detection.
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>{safety.description}</div>
         </div>
 
-        <div style={{ 
-          backgroundColor: 'rgba(255,255,255,0.1)', 
-          padding: '16px', 
-          borderRadius: '8px',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🤖 AI生成</div>
-          <div style={{ fontSize: '18px', fontWeight: 'bold', color: aiGen.color }}>
-            {aiGen.level}
-          </div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>{aiGen.description}</div>
-        </div>
+        {/* 右側：技術・規模 */}
+        <div>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            技術・規模
+          </h3>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* 主技術スタック */}
+            <div style={{
+              backgroundColor: 'white',
+              border: '1px solid #e8e8e8',
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontSize: '12px', color: '#595959', marginBottom: '8px' }}>
+                🛠️ 主技術スタック
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {mainTechs.slice(0, 5).map((tech, index) => (
+                  <span 
+                    key={tech}
+                    style={{
+                      backgroundColor: '#f0f0f0',
+                      color: '#262626',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    {tech}
+                  </span>
+                ))}
+                {mainTechs.length > 5 && (
+                  <span style={{ fontSize: '12px', color: '#8c8c8c' }}>
+                    +{mainTechs.length - 5}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        <div style={{ 
-          backgroundColor: 'rgba(255,255,255,0.1)', 
-          padding: '16px', 
-          borderRadius: '8px',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>🛠️ 主技術</div>
-          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-            {mainTech}
+            {/* プロジェクト規模 */}
+            <div style={{
+              backgroundColor: 'white',
+              border: '1px solid #e8e8e8',
+              borderRadius: '8px',
+              padding: '12px'
+            }}>
+              <div style={{ fontSize: '12px', color: '#595959', marginBottom: '8px' }}>
+                📊 プロジェクト規模
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#262626' }}>
+                    {scale.totalFiles}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#8c8c8c' }}>
+                    ファイル
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#262626' }}>
+                    {scale.totalLines.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#8c8c8c' }}>
+                    総行数
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#262626' }}>
+                    {scale.maxFile.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#8c8c8c' }}>
+                    最大ファイル
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>主要技術スタック</div>
-        </div>
-
-        <div style={{ 
-          backgroundColor: 'rgba(255,255,255,0.1)', 
-          padding: '16px', 
-          borderRadius: '8px',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>📊 規模</div>
-          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-            {result.type === 'zip' ? 
-              `${result.summary?.totalLines || 0}行` : 
-              `${result.lines || 0}行`
-            }
-          </div>
-          <div style={{ fontSize: '12px', opacity: 0.7 }}>総コード行数</div>
         </div>
       </div>
 
-      <div style={{ 
-        marginTop: '16px', 
-        padding: '12px', 
-        backgroundColor: 'rgba(255,255,255,0.1)', 
+      {/* 補足説明 */}
+      <div style={{
+        backgroundColor: '#f0f7ff',
+        border: '1px solid #d6e4ff',
         borderRadius: '8px',
+        padding: '12px 16px',
         fontSize: '14px',
+        color: '#0958d9',
         lineHeight: '1.4'
       }}>
-        <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTech}を使用した{result.totalFiles || 1}ファイルのプロジェクトです。
-        {safety.level.includes('高') && ' リスクが高いため注意が必要です。'}
-        {aiGen.level.includes('AI') && ' AI生成コードが含まれている可能性があります。'}
+        <strong>💡 プロジェクト概要:</strong> {projectType}で、{mainTechs.slice(0, 3).join('・')}を使用した{scale.totalFiles}ファイルのプロジェクトです。
+        {riskLevel.level === 'HIGH' && ' リスクが高いため注意が必要です。'}
+        {aiLevel.level === 'HIGH' && ' AI生成コードが含まれている可能性があります。'}
       </div>
     </div>
   );
