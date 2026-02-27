@@ -2842,6 +2842,372 @@ const TechDebtHeatmap: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) =
   );
 };
 
+// --- リファクタ優先度型定義 ---
+interface RefactorPriority {
+  path: string;
+  riskScore: number;
+  impactScore: number;
+  effortScore: number;
+  priorityScore: number;
+  rank: number;
+  reasons: string[];
+  suggestedActions: string[];
+}
+
+// --- Impactスコア計算（影響度）---
+const calculateImpactScore = (file: FileAnalysis): number => {
+  // 正規化関数
+  const normalize = (value: number, max: number) => Math.min((value / max) * 100, 100);
+  
+  // import数（依存関係）
+  const importCount = file.structure.imports?.length || 0;
+  const normalizedImports = normalize(importCount, 50); // 50 importsを上限
+  
+  // ファイルサイズ（中核ファイルの可能性）
+  const lineCount = file.lines;
+  const normalizedLines = normalize(lineCount, 1000); // 1000行を上限
+  
+  // 関数数（責務の大きさ）
+  const functionCount = file.structure.functions?.length || 0;
+  const normalizedFunctions = normalize(functionCount, 50); // 50関数を上限
+  
+  // 重み付け合成
+  const impact = 
+    0.4 * normalizedImports +    // 依存されている可能性
+    0.3 * normalizedLines +     // 中核ファイルの可能性
+    0.3 * normalizedFunctions;  // 責務の大きさ
+  
+  return Math.round(impact);
+};
+
+// --- Effortスコア計算（修正コスト）---
+const calculateEffortScore = (file: FileAnalysis): number => {
+  // 正規化関数
+  const normalize = (value: number, max: number) => Math.min((value / max) * 100, 100);
+  
+  // ネスト深度（理解難易度）
+  const nestingDepth = file.blackboxRisk?.breakdown?.nestingDepth || 0;
+  const normalizedNesting = normalize(nestingDepth, 8); // 8階層を上限
+  
+  // ファイル行数（作業量）
+  const lineCount = file.lines;
+  const normalizedLines = normalize(lineCount, 1000); // 1000行を上限
+  
+  // AI生成確率（読解困難の可能性）
+  const aiLikelihood = file.blackboxRisk?.aiEstimation?.aiLikelihood || 0;
+  const normalizedAi = normalize(aiLikelihood, 100); // 100%を上限
+  
+  // 重み付け合成
+  const effort = 
+    0.5 * normalizedNesting +   // 理解難易度
+    0.3 * normalizedLines +     // 作業量
+    0.2 * normalizedAi;        // 読解困難の可能性
+  
+  return Math.round(effort);
+};
+
+// --- リファクタ優先度計算エンジン ---
+const calculateRefactorPriority = (file: FileAnalysis): RefactorPriority => {
+  // Step 8-1: Risk（既存）
+  const riskScore = calculateFileRiskScore(file);
+  
+  // Step 8-2: Impact（新規）
+  const impactScore = calculateImpactScore(file);
+  
+  // Step 8-3: Effort（修正コスト）
+  const effortScore = calculateEffortScore(file);
+  
+  // Step 8-4: 最終優先度
+  // RefactorPriority = Risk × Impact × (1 + Effort * 0.5)
+  const priorityScore = Math.round(
+    riskScore * (impactScore / 100) * (1 + (effortScore / 100) * 0.5) * 100
+  );
+  
+  // 理由生成
+  const reasons: string[] = [];
+  if (riskScore >= 70) reasons.push('High risk score');
+  if (impactScore >= 70) reasons.push('High impact on codebase');
+  if (effortScore >= 70) reasons.push('High effort required');
+  if (file.structure.imports && file.structure.imports.length >= 20) reasons.push('High dependency');
+  if (file.lines >= 500) reasons.push('Large file');
+  if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 6) reasons.push('Deep nesting');
+  if (file.structure.functions && file.structure.functions.length >= 20) reasons.push('Many functions');
+  if (file.blackboxRisk?.aiEstimation?.aiLikelihood && file.blackboxRisk.aiEstimation.aiLikelihood >= 70) reasons.push('AI generated likely');
+  
+  // アクション提案
+  const suggestedActions: string[] = [];
+  if (file.blackboxRisk?.breakdown?.nestingDepth && file.blackboxRisk.breakdown.nestingDepth >= 4) {
+    suggestedActions.push('Reduce nesting depth');
+  }
+  if (file.lines >= 300) {
+    suggestedActions.push('Split large file');
+  }
+  if (file.structure.functions && file.structure.functions.length >= 15) {
+    suggestedActions.push('Extract helper functions');
+  }
+  if (file.blackboxRisk?.breakdown?.commentRate !== undefined && file.blackboxRisk.breakdown.commentRate < 0.15) {
+    suggestedActions.push('Add documentation');
+  }
+  if (file.structure.functions && file.structure.functions.length > 5) {
+    suggestedActions.push('Remove dead code');
+  }
+  
+  return {
+    path: file.fileName,
+    riskScore,
+    impactScore,
+    effortScore,
+    priorityScore,
+    rank: 0, // 後で設定
+    reasons,
+    suggestedActions
+  };
+};
+
+// --- リファクタ優先度ランキング生成 ---
+const generateRefactorRanking = (analysis: AnalysisResult): RefactorPriority[] => {
+  if (analysis.type !== 'zip' || !analysis.files) {
+    return [];
+  }
+  
+  const priorities = analysis.files.map(file => calculateRefactorPriority(file));
+  
+  // 優先度でソート
+  priorities.sort((a, b) => b.priorityScore - a.priorityScore);
+  
+  // ランク付け
+  priorities.forEach((priority, index) => {
+    priority.rank = index + 1;
+  });
+  
+  return priorities;
+};
+
+// --- リファクタ優先度表示コンポーネント ---
+const RefactorPriorityEngine: React.FC<{ analysis: AnalysisResult }> = ({ analysis }) => {
+  const ranking = generateRefactorRanking(analysis);
+  
+  if (ranking.length === 0) {
+    return null;
+  }
+  
+  // 上位10件を表示
+  const topPriorities = ranking.slice(0, 10);
+  
+  // 優先度レベルの色分け
+  const getPriorityColor = (score: number) => {
+    if (score >= 80) return { bg: '#fee2e2', border: '#ef4444', icon: '🔴', text: '#991b1b' };
+    if (score >= 60) return { bg: '#fef3c7', border: '#eab308', icon: '🟡', text: '#713f12' };
+    if (score >= 40) return { bg: '#dbeafe', border: '#3b82f6', icon: '🔵', text: '#1e3a8a' };
+    return { bg: '#dcfce7', border: '#22c55e', icon: '🟢', text: '#166534' };
+  };
+  
+  // ファイルクリックハンドラ
+  const handleFileClick = (filePath: string) => {
+    const fileElement = document.querySelector(`[data-file-path="${filePath}"]`);
+    if (fileElement) {
+      fileElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (fileElement as HTMLElement).style.backgroundColor = '#fff3cd';
+      setTimeout(() => {
+        (fileElement as HTMLElement).style.backgroundColor = '';
+      }, 2000);
+    }
+  };
+  
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '1px solid #d9d9d9',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '24px'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#262626' }}>
+        🔧 リファクタ優先度エンジン
+      </h3>
+      
+      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', lineHeight: '1.4' }}>
+        💡 Risk（危険度）× Impact（影響度）× Effort（修正コスト）で修正優先度を算出。上位ファイルから改善しましょう。
+      </div>
+      
+      {/* 優先度ランキング */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+          📊 修正優先度ランキング
+        </h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {topPriorities.map((priority) => {
+            const color = getPriorityColor(priority.priorityScore);
+            
+            return (
+              <div
+                key={priority.path}
+                data-file-path={priority.path}
+                style={{
+                  backgroundColor: color.bg,
+                  border: `2px solid ${color.border}`,
+                  borderRadius: '8px',
+                  padding: '16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.01)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                onClick={() => handleFileClick(priority.path)}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  {/* ランクとアイコン */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      color: color.text,
+                      minWidth: '24px',
+                      textAlign: 'center'
+                    }}>
+                      {priority.rank}
+                    </div>
+                    <div style={{ fontSize: '20px' }}>{color.icon}</div>
+                  </div>
+                  
+                  {/* ファイル情報 */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      fontWeight: 'bold', 
+                      color: color.text,
+                      marginBottom: '6px'
+                    }}>
+                      {priority.path.split('/').pop()}
+                    </div>
+                    
+                    {/* スコア詳細 */}
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      marginBottom: '8px',
+                      display: 'flex',
+                      gap: '16px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <span>Priority: <strong style={{ color: color.text }}>{priority.priorityScore}</strong></span>
+                      <span>Risk: {priority.riskScore}</span>
+                      <span>Impact: {priority.impactScore}</span>
+                      <span>Effort: {priority.effortScore}</span>
+                    </div>
+                    
+                    {/* 理由表示 */}
+                    {priority.reasons.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px' }}>
+                          Why flagged:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {priority.reasons.map((reason, index) => (
+                            <span
+                              key={index}
+                              style={{
+                                backgroundColor: '#f3f4f6',
+                                color: '#374151',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                border: '1px solid #d1d5db'
+                              }}
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* アクション提案 */}
+                    {priority.suggestedActions.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px' }}>
+                          Suggested actions:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {priority.suggestedActions.map((action, index) => (
+                            <span
+                              key={index}
+                              style={{
+                                backgroundColor: '#e0f2fe',
+                                color: '#0369a1',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                border: '1px solid #7dd3fc'
+                              }}
+                            >
+                              {action}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* 優先度分布サマリー */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        padding: '16px'
+      }}>
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#262626' }}>
+          📈 優先度分布
+        </h4>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#ef4444' }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              High (80+): <strong>{ranking.filter(r => r.priorityScore >= 80).length}</strong>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#eab308' }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              Medium (60-79): <strong>{ranking.filter(r => r.priorityScore >= 60 && r.priorityScore < 80).length}</strong>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#3b82f6' }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              Low (40-59): <strong>{ranking.filter(r => r.priorityScore >= 40 && r.priorityScore < 60).length}</strong>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#22c55e' }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              Minimal (&lt;40): <strong>{ranking.filter(r => r.priorityScore < 40).length}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ExecutionFlowAnalysis: React.FC<{ content: string; language: string }> = ({ content, language }) => {
   const analyzeExecutionFlow = () => {
     const flow = {
@@ -3755,6 +4121,9 @@ function App() {
 
             {/* 技術的負債ヒートマップ */}
             <TechDebtHeatmap analysis={analysisResult} />
+
+            {/* リファクタ優先度エンジン */}
+            <RefactorPriorityEngine analysis={analysisResult} />
 
             {analysisResult.blackboxRisk && <RiskAnalysisView risk={analysisResult.blackboxRisk} />}
 
